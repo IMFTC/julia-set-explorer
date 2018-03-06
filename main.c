@@ -2,23 +2,203 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 
-enum {
-	RED,
+#define PIXBUF_HEIGHT 1000
+#define PIXBUF_WIDTH  1000
+#define ZOOM_FACTOR 0.1
+
+/* TODO: Make values interactive */
+#define	CX - .4
+#define	CY .6
+#define MAX_ITERATIONS 100
+
+struct julia_settings {
+	/* Rectangle in the complex plain that will be drawn */
+	gdouble x_min;
+	gdouble x_max;
+	gdouble y_min;
+	gdouble y_max;
+
+	/* Complex number c used in
+	 * z_(n+1) = (z_n)^2 + c
+	 */
+	double cx;
+	double cy;
+
+	gint max_iterations;
+};
+
+struct julia_set {
+	GtkImage *image;
+	struct julia_settings *settings;
+};
+
+static enum {
+	RED = 0,
 	GREEN,
 	BLUE
 } colors;
 
+static gboolean update_pixbuf (GdkPixbuf *pixbuf, struct julia_settings *settings);
+static gboolean scroll_event_cb (GtkWidget *widget, GdkEventScroll *event, gpointer user_data);
+static gboolean update_pixbuf (GdkPixbuf *pixbuf, struct julia_settings *settings);
 
-gboolean scroll_event_cb(GtkWidget *widget,
-			 GdkEvent *event,
-			 gpointer user_data)
+static gboolean
+button_press_event_cb (GtkWidget *widget,
+		       GdkEventButton *event,
+		       gpointer user_data)
 {
-	printf("Got scroll event!\n");
+	printf("GdkEventButton at (%f,%f)\n", event->x, event->y);
+}
+
+static gboolean
+scroll_event_cb (GtkWidget *widget,
+		 GdkEventScroll *event,
+		 gpointer user_data)
+{
+	gdouble x, y;
+	gdouble zoom;
+	gdouble x_min, x_max, y_min, y_max;
+	gboolean zoom_in;
+
+	x = event->x;
+	y = event->y;
+	printf("Got GdkEventScroll at (%3f,%3f)\n", x, y);
+
+	struct julia_set *julia = (struct julia_set*) user_data;
+	GtkImage *image = julia->image;
+	GdkPixbuf *pixbuf = gtk_image_get_pixbuf (image);
+
+	struct julia_settings *settings = julia->settings;
+
+	x_min = settings->x_min;
+	x_max = settings->x_max;
+	y_min = settings->y_min;
+	y_max = settings->y_max;
+
+	zoom = ZOOM_FACTOR;
+
+
+	/* TODO: Zooming should be based on some integer scale which
+	 * would be used to calculate the visible area. This would
+	 * guarantee the same area when going back and forth between
+	 * zoom levels. As the code is now, zooming in and out one
+	 * step will result in a slightly changed area shown in the
+	 * image. */
+	switch (event->direction) {
+	case GDK_SCROLL_DOWN:
+		printf("Zoomnig in ...\n");
+		settings->x_min = x_min + zoom * (x_max - x_min) / 2.;
+		settings->x_max = x_max - zoom * (x_max - x_min) / 2.;
+		settings->y_min = y_min + zoom * (y_max - y_min) / 2.;
+		settings->y_max = y_max - zoom * (y_max - y_min) / 2.;
+		break;
+	case GDK_SCROLL_UP:
+		printf("Zooming out ...\n");
+		settings->x_min = x_min - zoom * (x_max - x_min) / 2.;
+		settings->x_max = x_max + zoom * (x_max - x_min) / 2.;
+		settings->y_min = y_min - zoom * (y_max - y_min) / 2.;
+		settings->y_max = y_max + zoom * (y_max - y_min) / 2.;
+		break;
+	default:
+		g_message("Unhandled scroll direction!");
+	}
+
+	printf("new area: (%f, %f) - (%f, %f)\n", x_min, y_min, x_max, y_max);
+	update_pixbuf (pixbuf, settings);
+	gtk_image_set_from_pixbuf (image, pixbuf);
 	/* stop further handling of event */
 	return TRUE;
 }
 
-/* void update_pixbuf() */
+/* Draws the julia set for the rectangle between (x_min, y_min) and
+ * (x_max, y_max). */
+static gboolean
+update_pixbuf (GdkPixbuf *pixbuf,
+	       struct julia_settings *settings)
+{
+	/* Unpack settings */
+	gdouble x_min = settings->x_min;
+	gdouble x_max = settings->x_max;
+	gdouble y_min = settings->y_min;
+	gdouble y_max = settings->y_max;
+	gint max_iterations = settings->max_iterations;
+	gdouble cx = settings->cx;
+	gdouble cy = settings->cy;
+
+	double ax, ay, aa, bb, _2ab;
+	guchar *pixels_start, *pixels_end, *pixel, *pixel_mirrored;
+	gint rowstride;
+	gsize pixbuf_size;
+	gdouble width, height;
+	gint pixbuf_width, pixbuf_height;
+	gint iteration;
+
+	pixbuf_width = gdk_pixbuf_get_width (pixbuf);
+	pixbuf_height = gdk_pixbuf_get_height (pixbuf);
+	pixbuf_size = gdk_pixbuf_get_byte_length (pixbuf);
+
+	pixels_start = gdk_pixbuf_get_pixels (pixbuf);
+	pixels_end = pixels_start + pixbuf_size;
+	rowstride = gdk_pixbuf_get_rowstride (pixbuf);
+
+	/* Size of the rectangle that will be drawn in the pixbuf */
+	width = x_max - x_min;
+	height = y_max - y_min;
+
+	/* Update every pixel */
+	for (int x = 0; x <= pixbuf_width / 2; x++)
+	{
+		gint row_offset = 3 * x;
+
+		for (int y = 0; y < pixbuf_height; y++)
+		{
+			/* get the re and im parts for complex number
+			 * located at the current pixel */
+			ax = x_min + width / pixbuf_width * x;
+			ay = y_min + height / pixbuf_height * y;
+			// printf("z = %f,%f\n", ax, ay);
+
+			iteration = 0;
+			while (iteration < max_iterations) {
+				aa = ax * ax;
+				bb = ay * ay;
+
+				/* Leave loop if |z_n| > 2 */
+				if (aa + bb > 4.)
+					break;
+
+				_2ab = 2.0 * ax * ay;
+				ax = aa - bb + cx;
+				ay = _2ab + cy;
+
+				iteration++;
+			}
+			// printf("%d iterations\n", iteration);
+
+			gint position = y * rowstride + row_offset;
+			pixel = pixels_start + position;
+			pixel_mirrored = pixels_end - position;
+
+			if (iteration == max_iterations) {
+				pixel[RED] = 0;
+				pixel[GREEN] = 0;
+				pixel[BLUE] = 0;
+				pixel_mirrored[RED] = 0;
+				pixel_mirrored[GREEN] = 0;
+				pixel_mirrored[BLUE] = 0;
+			} else {
+				pixel[RED] = (guchar) (255 - (255. / max_iterations) * iteration);
+				pixel[GREEN] = (guchar) (255 - (255. / max_iterations * iteration));
+				pixel[BLUE] = (guchar) (255 - (255. / max_iterations * iteration));
+				pixel_mirrored[RED] = (guchar) (255 - (255. / max_iterations * iteration));
+				pixel_mirrored[GREEN] = (guchar) (255 - (255. / max_iterations * iteration));
+				pixel_mirrored[BLUE] = (guchar) (255 - (255. / max_iterations * iteration));
+			}
+		}
+	}
+
+	return TRUE;
+}
 
 int
 main (int argc, char **argv)
@@ -30,19 +210,21 @@ main (int argc, char **argv)
 
 	int rowstride;
 	int iteration;
-	int max_iteration;
+	int max_iterations;
 
-	gtk_init(&argc, &argv);
+	double x_min, x_max, y_min, y_max;
+
+	gtk_init (&argc, &argv);
 
 	window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title (GTK_WINDOW (window), "Julia Set Explorer");
 
-
 	pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB,
 				 FALSE,
 				 8,
-				 800,
-				 800);
+				 PIXBUF_WIDTH,
+				 PIXBUF_HEIGHT);
+	image = gtk_image_new_from_pixbuf (pixbuf);
 
 	g_print("gdk_pixbuf_get_byte_length: %d\n",
 		gdk_pixbuf_get_byte_length (pixbuf));
@@ -50,82 +232,48 @@ main (int argc, char **argv)
 	guchar *pixels = gdk_pixbuf_get_pixels (pixbuf);
 	rowstride = gdk_pixbuf_get_rowstride (pixbuf);
 
-	/* for (int r = 0; r < 800; r++) { */
-	/* 	for (int i = 0; i < 800 * 3; i++) { */
-	/* 		pixels[r * rowstride + 3 * i] = i % 255; */
-	/* 		pixels[r * rowstride + 3 * i + 1] = i % 255; */
-	/* 		pixels[r * rowstride + 3 * i + 2] = i % 255; */
-	/* 	} */
-	/* } */
+	max_iterations = MAX_ITERATIONS;
 
-	double cx = -0.8;
-	double cy = 0.156;
+	/* Draw inital state to pixbuf */
+	struct julia_settings *settings = g_malloc (sizeof (struct julia_settings));
+	settings->x_min = -2;
+	settings->x_max = 2;
+	settings->y_min = -2;
+	settings->y_max = 2;
+	settings->cx = CX;
+	settings->cy = CY;
+	settings->max_iterations = max_iterations;
 
-	/* double cx = 1.5; */
-	/* double cy = 1.5; */
+	struct julia_set *jset = g_malloc (sizeof (struct julia_set));
+	jset->image = GTK_IMAGE (image);
+	jset->settings = settings;
 
-	double ax, ay, aa, bb, _2ab;
-	guchar *pixel;
-
-	max_iteration = 100;
-	/* Update every pixel */
-	for (int x = 0; x < 800; x++)
-	{
-		for (int y = 0; y < 800; y++)
-		{
-			/* get the re and im parts for complex number
-			 * located at the current pixel */
-			ax = -2.0 + 4. / 800. * x;
-			ay = -2.0 + 4. / 800. * y;
-			// printf("z = %f,%f\n", ax, ay);
-
-			iteration = 0;
-			while (iteration < max_iteration) {
-				aa = ax * ax;
-				bb = ay * ay;
-
-				/* Leave loop if |z_n| > 2 */
-				if (aa + bb > 4.)
-					break;
-
-				// printf("%f\n", z_re * z_re + z_im * z_im);
-				_2ab = 2.0 * ax * ay;
-				ax = aa - bb + cx;
-				ay = _2ab + cy;
-
-				iteration++;
-			}
-			// printf("%d iterations\n", iteration);
-
-			pixel = pixels + (y * rowstride + 3 * x);
-
-			if (iteration == max_iteration) {
-				pixel[RED] = 0;
-				pixel[GREEN] = 0;
-				pixel[BLUE] = 0;
-			} else {
-				pixel[RED] =
-					(guchar) (255 - (255. / max_iteration) * iteration);
-				pixel[GREEN] =
-					(guchar) (255 - (255. / max_iteration * iteration));
-				pixel[BLUE] =
-					(guchar) (255 - (255. / max_iteration * iteration));
-			}
-		}
-	}
-
-	image = gtk_image_new_from_pixbuf (pixbuf);
+	update_pixbuf(pixbuf, settings);
 
 	eventbox = gtk_event_box_new ();
-	gtk_event_box_set_above_child(GTK_EVENT_BOX (eventbox), TRUE);
+	// gtk_event_box_set_above_child(GTK_EVENT_BOX (eventbox), TRUE);
 
 	gtk_container_add (GTK_CONTAINER (eventbox), image);
-	g_signal_connect(eventbox, "scroll-event", G_CALLBACK (scroll_event_cb), NULL);
-	g_signal_connect(eventbox, "button-press-event", G_CALLBACK (scroll_event_cb), NULL);
+
+	/* GtkEventBox does not catch scroll events by default, add
+	 * them manually since we use them for zooming. */
+	gtk_widget_add_events (eventbox, GDK_SCROLL_MASK);
+
+	// g_signal_connect(window, "event", G_CALLBACK (scroll_event_cb), NULL);
+	g_signal_connect(eventbox, "scroll-event", G_CALLBACK (scroll_event_cb), jset);
+	g_signal_connect(eventbox, "button-press-event", G_CALLBACK (button_press_event_cb), jset);
+
+	// g_signal_connect(eventbox, "key-press-event", G_CALLBACK (scroll_event_cb), NULL);
+
+	printf("margin: %f\n", gtk_widget_get_margin_start (GTK_WIDGET (window)));
 	gtk_container_add (GTK_CONTAINER (window), eventbox);
 	gtk_widget_show_all (GTK_WIDGET (window));
 
-	gtk_main();
-	return 0;
 
+	gtk_main();
+
+	g_free (jset->settings);
+	g_free (jset);
+
+	return 0;
 }
