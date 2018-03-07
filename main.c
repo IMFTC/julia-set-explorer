@@ -18,7 +18,7 @@
 #define MAX_ITERATIONS 120
 
 struct julia_settings {
-	/* Rectangle in the complex plain that will be drawn */
+	/* Rectangle in the complex plane that will be drawn */
 	double center_x;
 	double center_y;
 
