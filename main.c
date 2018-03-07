@@ -36,11 +36,11 @@ struct julia_set {
 	struct julia_settings *settings;
 };
 
-static enum {
+enum {
 	RED = 0,
 	GREEN,
 	BLUE
-} colors;
+};
 
 static gboolean update_pixbuf (GdkPixbuf *pixbuf, struct julia_settings *settings);
 static gboolean scroll_event_cb (GtkWidget *widget, GdkEventScroll *event, gpointer user_data);
@@ -52,6 +52,8 @@ button_press_event_cb (GtkWidget *widget,
 		       gpointer user_data)
 {
 	printf("GdkEventButton at (%f,%f)\n", event->x, event->y);
+
+	return TRUE;
 }
 
 static gboolean
@@ -62,7 +64,6 @@ scroll_event_cb (GtkWidget *widget,
 	gdouble x, y;
 	gdouble zoom;
 	gdouble x_min, x_max, y_min, y_max;
-	gboolean zoom_in;
 
 	x = event->x;
 	y = event->y;
@@ -215,11 +216,7 @@ main (int argc, char **argv)
 	GtkWidget *image;
 	GdkPixbuf *pixbuf;
 
-	int rowstride;
-	int iteration;
 	int max_iterations;
-
-	double x_min, x_max, y_min, y_max;
 
 	gtk_init (&argc, &argv);
 
@@ -233,11 +230,8 @@ main (int argc, char **argv)
 				 PIXBUF_HEIGHT);
 	image = gtk_image_new_from_pixbuf (pixbuf);
 
-	g_print("gdk_pixbuf_get_byte_length: %d\n",
+	g_print("gdk_pixbuf_get_byte_length: %lu\n",
 		gdk_pixbuf_get_byte_length (pixbuf));
-
-	guchar *pixels = gdk_pixbuf_get_pixels (pixbuf);
-	rowstride = gdk_pixbuf_get_rowstride (pixbuf);
 
 	max_iterations = MAX_ITERATIONS;
 
@@ -272,10 +266,8 @@ main (int argc, char **argv)
 
 	// g_signal_connect(eventbox, "key-press-event", G_CALLBACK (scroll_event_cb), NULL);
 
-	printf("margin: %f\n", gtk_widget_get_margin_start (GTK_WIDGET (window)));
 	gtk_container_add (GTK_CONTAINER (window), eventbox);
 	gtk_widget_show_all (GTK_WIDGET (window));
-
 
 	gtk_main();
 
