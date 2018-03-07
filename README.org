@@ -1,0 +1,22 @@
+* julia-set-explorer (aka 'predending there aren't enough of these applications yet!')
+  A Julia set explorer written in C using gtk+
+
+** *WARNING:* At this stage there is NO serious code here.
+   So far it's just a sanbox for testing the very basic building
+   blocks of a possible application
+
+For now the focus is the well known function f(z) = z^2 + c.
+
+
+** Goals:
+   - Be fast!
+     - use mirroring to reduce calculations whenever possible
+     - use caching (uses a lot of memory, only meaningful in some
+       cases)
+     - use multithreading where possible (and sensible)
+   - Good user experience
+     - Create a UI for adjusting the value of c, the max. number of
+       iterations, etc.
+     - Allow easy navigation inside the Julia set
+   - Meta
+     - Use the meson build system
