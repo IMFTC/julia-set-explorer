@@ -1,3 +1,5 @@
-julia-explorer: main.c
-	gcc `pkg-config --cflags gtk+-3.0` -o \
-	julia-explorer main.c `pkg-config --libs gtk+-3.0` -g
+# This file is deprecated, use meson for building!
+
+.PHONY: all
+clean:
+	echo "Please use meson to build, make is currently not supported!"
