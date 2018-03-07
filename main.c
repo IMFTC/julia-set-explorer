@@ -2,12 +2,16 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 
-#define PIXBUF_HEIGHT 1000
-#define PIXBUF_WIDTH  1000
-#define ZOOM_FACTOR 0.1
+#include <string.h>
+
+/* Use even numbers to allow mirroring! */
+#define PIXBUF_HEIGHT 800
+#define PIXBUF_WIDTH  800
+
+#define ZOOM_FACTOR 0.05
 
 /* TODO: Make values interactive */
-#define	CX - .4
+#define	CX -.4
 #define	CY .6
 #define MAX_ITERATIONS 100
 
@@ -126,7 +130,7 @@ update_pixbuf (GdkPixbuf *pixbuf,
 	gdouble cy = settings->cy;
 
 	double ax, ay, aa, bb, _2ab;
-	guchar *pixels_start, *pixels_end, *pixel, *pixel_mirrored;
+	guchar *first_pixel, *last_pixel, *pixel, *pixel_mirrored;
 	gint rowstride;
 	gsize pixbuf_size;
 	gdouble width, height;
@@ -137,16 +141,21 @@ update_pixbuf (GdkPixbuf *pixbuf,
 	pixbuf_height = gdk_pixbuf_get_height (pixbuf);
 	pixbuf_size = gdk_pixbuf_get_byte_length (pixbuf);
 
-	pixels_start = gdk_pixbuf_get_pixels (pixbuf);
-	pixels_end = pixels_start + pixbuf_size;
+	first_pixel = gdk_pixbuf_get_pixels (pixbuf);
+	/* adress of first byte of last pixel (one pixel is 3 bytes) */
+	last_pixel = first_pixel + pixbuf_size - 3;
 	rowstride = gdk_pixbuf_get_rowstride (pixbuf);
 
 	/* Size of the rectangle that will be drawn in the pixbuf */
 	width = x_max - x_min;
 	height = y_max - y_min;
 
-	/* Update every pixel */
-	for (int x = 0; x <= pixbuf_width / 2; x++)
+	gchar max_iter_color[3] = {0};
+	gdouble color_scale = 255. / max_iterations;
+
+	/* Update every pixel using the symetry by filling left and
+	 * right half in the same loops. */
+	for (int x = 0; x <= pixbuf_width / 2 - 1; x++)
 	{
 		gint row_offset = 3 * x;
 
@@ -176,23 +185,21 @@ update_pixbuf (GdkPixbuf *pixbuf,
 			// printf("%d iterations\n", iteration);
 
 			gint position = y * rowstride + row_offset;
-			pixel = pixels_start + position;
-			pixel_mirrored = pixels_end - position;
+			pixel = first_pixel + position;
+			pixel_mirrored = last_pixel - position;
 
 			if (iteration == max_iterations) {
-				pixel[RED] = 0;
-				pixel[GREEN] = 0;
-				pixel[BLUE] = 0;
-				pixel_mirrored[RED] = 0;
-				pixel_mirrored[GREEN] = 0;
-				pixel_mirrored[BLUE] = 0;
+				memcpy(pixel, max_iter_color, 3);
+				memcpy(pixel_mirrored, max_iter_color, 3);
+				/* DEBUG: use some hue for the mirrored part: */
+				// pixel_mirrored[RED] = 200;
 			} else {
-				pixel[RED] = (guchar) (255 - (255. / max_iterations) * iteration);
-				pixel[GREEN] = (guchar) (255 - (255. / max_iterations * iteration));
-				pixel[BLUE] = (guchar) (255 - (255. / max_iterations * iteration));
-				pixel_mirrored[RED] = (guchar) (255 - (255. / max_iterations * iteration));
-				pixel_mirrored[GREEN] = (guchar) (255 - (255. / max_iterations * iteration));
-				pixel_mirrored[BLUE] = (guchar) (255 - (255. / max_iterations * iteration));
+				pixel[RED] = 255 - (color_scale * iteration);
+				pixel[GREEN] = pixel[RED];
+				pixel[BLUE] = pixel[RED];
+				memcpy(pixel_mirrored, pixel, 3);
+				/* DEBUG: use some hue for the mirrored part: */
+				// pixel_mirrored[RED] = 200;
 			}
 		}
 	}
