@@ -15,7 +15,7 @@
 /* TODO: Make values interactive */
 #define	CX -.4
 #define	CY .6
-#define MAX_ITERATIONS 100
+#define MAX_ITERATIONS 120
 
 struct julia_settings {
 	/* Rectangle in the complex plain that will be drawn */
