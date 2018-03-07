@@ -76,10 +76,10 @@ scroll_event_cb (GtkWidget *widget,
 
 	switch (event->direction) {
 	case GDK_SCROLL_DOWN:
-		(settings->zoom_level)++;
+		settings->zoom_level++;
 		break;
 	case GDK_SCROLL_UP:
-		(settings->zoom_level)--;
+		settings->zoom_level--;
 		break;
 	default:
 		g_message("Unhandled scroll direction!");
@@ -98,7 +98,6 @@ static gboolean
 update_pixbuf (GdkPixbuf *pixbuf,
 	       struct julia_settings *settings)
 {
-	/* Unpack settings */
 	double center_x = settings->center_x;
 	double center_y = settings->center_y;
 
@@ -115,8 +114,8 @@ update_pixbuf (GdkPixbuf *pixbuf,
 	gsize pixbuf_size;
 	gint pixbuf_width, pixbuf_height, iteration, row_offset, rowstride;
 
-	/* dimensions of the rectangle in the complex plane after
-	 * applying the zoom factor */
+	/* Dimensions of the rectangle in the complex plane after
+	 * applying the zoom factor. */
 	double width = default_width * pow(ZOOM_FACTOR, zoom_level);
 	double height = default_height * pow(ZOOM_FACTOR, zoom_level);
 
@@ -127,26 +126,24 @@ update_pixbuf (GdkPixbuf *pixbuf,
 	pixbuf_height = gdk_pixbuf_get_height (pixbuf);
 	pixbuf_size = gdk_pixbuf_get_byte_length (pixbuf);
 
-	/* address of first byte of  pixel (one pixel is 3 bytes) */
+	/* Address of first byte of  pixel (one pixel is 3 bytes). */
 	first_pixel = gdk_pixbuf_get_pixels (pixbuf);
-	/* address of first byte of last pixel (one pixel is 3 bytes) */
+	/* Address of first byte of last pixel (one pixel is 3 bytes). */
 	last_pixel = first_pixel + pixbuf_size - 3;
 
-	/* bytes per line */
+	/* Number of bytes per line. */
 	rowstride = gdk_pixbuf_get_rowstride (pixbuf);
 
 	/* Update every pixel taking advantage of the symmetry by
 	 * filling the left and right half at once. */
-	for (int x = 0; x <= pixbuf_width / 2 - 1; x++) {
+	for (int x = 0; x < pixbuf_width / 2; x++) {
 		row_offset = 3 * x;
 
 		for (int y = 0; y < pixbuf_height; y++) {
-			/* get the re and im parts for the complex
-			 * located at the current pixel */
+			/* Get the re and im parts for the complex number
+			 * corresponding to the current pixel. */
 			ax = center_x + width * ((double) x / (double) pixbuf_width - 0.5);
 			ay = center_y + height * ((double) y / (double) pixbuf_height - 0.5);
-			// ay = y_min + (height / pixbuf_height * y);
-			// printf("z = %f,%f\n", ax, ay);
 
 			iteration = 0;
 			while (iteration < max_iterations) {
@@ -164,7 +161,6 @@ update_pixbuf (GdkPixbuf *pixbuf,
 				iteration++;
 			}
 
-			// printf("%d iterations\n", iteration);
 			gint position = y * rowstride + row_offset;
 			pixel = first_pixel + position;
 			pixel_mirrored = last_pixel - position;
