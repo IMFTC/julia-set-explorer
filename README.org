@@ -1,12 +1,12 @@
-* julia-set-explorer (aka 'predending there aren't enough of these applications yet!')
+* julia-set-explorer
+  (aka 'pretending there aren't enough of these applications yet!')
   A Julia set explorer written in C using gtk+
 
-** *WARNING:* At this stage there is NO serious code here.
-   So far it's just a sanbox for testing the very basic building
-   blocks of a possible application
+** *WARNING:* At this stage there is NO serious code here.  So far
+   it's just a sandbox for testing the very basic building blocks of a
+   possible application.
 
 For now the focus is the well known function f(z) = z^2 + c.
-
 
 ** Goals:
    - Be fast!
