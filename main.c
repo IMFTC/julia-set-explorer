@@ -229,6 +229,13 @@ main (int argc, char **argv)
 	update_pixbuf(pixbuf, settings);
 
 	eventbox = gtk_event_box_new ();
+	/* FIXME: There is some padding around the image that should
+	 * not be there and into which the eventbox expands. So the
+	 * next two lines are needed to ensure the eventbox and the
+	 * image share the same coordinates. */
+	gtk_widget_set_halign (eventbox, GTK_ALIGN_CENTER);
+	gtk_widget_set_valign (eventbox, GTK_ALIGN_CENTER);
+
 	// gtk_event_box_set_above_child(GTK_EVENT_BOX (eventbox), TRUE);
 
 	gtk_container_add (GTK_CONTAINER (eventbox), image);
