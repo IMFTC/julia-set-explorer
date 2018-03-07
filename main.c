@@ -3,12 +3,14 @@
 #include <glib.h>
 
 #include <string.h>
+#include <math.h>
 
 /* Use even numbers to allow mirroring! */
 #define PIXBUF_HEIGHT 800
 #define PIXBUF_WIDTH  800
 
-#define ZOOM_FACTOR 0.05
+/* Scaling when zooming in one step */
+#define ZOOM_FACTOR 0.9
 
 /* TODO: Make values interactive */
 #define	CX -.4
@@ -17,10 +19,14 @@
 
 struct julia_settings {
 	/* Rectangle in the complex plain that will be drawn */
-	gdouble x_min;
-	gdouble x_max;
-	gdouble y_min;
-	gdouble y_max;
+	double center_x;
+	double center_y;
+
+	/* width and height for zoom level 0 */
+	double default_width;
+	double default_height;
+
+	int zoom_level;
 
 	/* Complex number c used in
 	 * z_(n+1) = (z_n)^2 + c
@@ -61,54 +67,25 @@ scroll_event_cb (GtkWidget *widget,
 		 GdkEventScroll *event,
 		 gpointer user_data)
 {
-	gdouble x, y;
-	gdouble zoom;
-	gdouble x_min, x_max, y_min, y_max;
-
-	x = event->x;
-	y = event->y;
-	printf("Got GdkEventScroll at (%3f,%3f)\n", x, y);
+	printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
 
 	struct julia_set *julia = (struct julia_set*) user_data;
 	GtkImage *image = julia->image;
 	GdkPixbuf *pixbuf = gtk_image_get_pixbuf (image);
-
 	struct julia_settings *settings = julia->settings;
 
-	x_min = settings->x_min;
-	x_max = settings->x_max;
-	y_min = settings->y_min;
-	y_max = settings->y_max;
-
-	zoom = ZOOM_FACTOR;
-
-
-	/* TODO: Zooming should be based on some integer scale which
-	 * would be used to calculate the visible area. This would
-	 * guarantee the same area when going back and forth between
-	 * zoom levels. As the code is now, zooming in and out one
-	 * step will result in a slightly changed area shown in the
-	 * image. */
 	switch (event->direction) {
 	case GDK_SCROLL_DOWN:
-		printf("Zoomnig in ...\n");
-		settings->x_min = x_min + zoom * (x_max - x_min) / 2.;
-		settings->x_max = x_max - zoom * (x_max - x_min) / 2.;
-		settings->y_min = y_min + zoom * (y_max - y_min) / 2.;
-		settings->y_max = y_max - zoom * (y_max - y_min) / 2.;
+		(settings->zoom_level)++;
 		break;
 	case GDK_SCROLL_UP:
-		printf("Zooming out ...\n");
-		settings->x_min = x_min - zoom * (x_max - x_min) / 2.;
-		settings->x_max = x_max + zoom * (x_max - x_min) / 2.;
-		settings->y_min = y_min - zoom * (y_max - y_min) / 2.;
-		settings->y_max = y_max + zoom * (y_max - y_min) / 2.;
+		(settings->zoom_level)--;
 		break;
 	default:
 		g_message("Unhandled scroll direction!");
 	}
 
-	printf("new area: (%f, %f) - (%f, %f)\n", x_min, y_min, x_max, y_max);
+	printf("Setting zoom level to %d\n", settings->zoom_level);
 	update_pixbuf (pixbuf, settings);
 	gtk_image_set_from_pixbuf (image, pixbuf);
 	/* stop further handling of event */
@@ -122,50 +99,53 @@ update_pixbuf (GdkPixbuf *pixbuf,
 	       struct julia_settings *settings)
 {
 	/* Unpack settings */
-	gdouble x_min = settings->x_min;
-	gdouble x_max = settings->x_max;
-	gdouble y_min = settings->y_min;
-	gdouble y_max = settings->y_max;
+	double center_x = settings->center_x;
+	double center_y = settings->center_y;
+
+	double default_width = settings->default_width;
+	double default_height = settings->default_height;
+	gint zoom_level = settings->zoom_level;
+
 	gint max_iterations = settings->max_iterations;
-	gdouble cx = settings->cx;
-	gdouble cy = settings->cy;
+	double cx = settings->cx;
+	double cy = settings->cy;
 
 	double ax, ay, aa, bb, _2ab;
 	guchar *first_pixel, *last_pixel, *pixel, *pixel_mirrored;
-	gint rowstride;
 	gsize pixbuf_size;
-	gdouble width, height;
-	gint pixbuf_width, pixbuf_height;
-	gint iteration;
+	gint pixbuf_width, pixbuf_height, iteration, row_offset, rowstride;
+
+	/* dimensions of the rectangle in the complex plane after
+	 * applying the zoom factor */
+	double width = default_width * pow(ZOOM_FACTOR, zoom_level);
+	double height = default_height * pow(ZOOM_FACTOR, zoom_level);
+
+	char max_iter_color[3] = {0};
+	double color_scale = 255. / max_iterations;
 
 	pixbuf_width = gdk_pixbuf_get_width (pixbuf);
 	pixbuf_height = gdk_pixbuf_get_height (pixbuf);
 	pixbuf_size = gdk_pixbuf_get_byte_length (pixbuf);
 
+	/* address of first byte of  pixel (one pixel is 3 bytes) */
 	first_pixel = gdk_pixbuf_get_pixels (pixbuf);
-	/* adress of first byte of last pixel (one pixel is 3 bytes) */
+	/* address of first byte of last pixel (one pixel is 3 bytes) */
 	last_pixel = first_pixel + pixbuf_size - 3;
+
+	/* bytes per line */
 	rowstride = gdk_pixbuf_get_rowstride (pixbuf);
 
-	/* Size of the rectangle that will be drawn in the pixbuf */
-	width = x_max - x_min;
-	height = y_max - y_min;
+	/* Update every pixel taking advantage of the symmetry by
+	 * filling the left and right half at once. */
+	for (int x = 0; x <= pixbuf_width / 2 - 1; x++) {
+		row_offset = 3 * x;
 
-	gchar max_iter_color[3] = {0};
-	gdouble color_scale = 255. / max_iterations;
-
-	/* Update every pixel using the symetry by filling left and
-	 * right half in the same loops. */
-	for (int x = 0; x <= pixbuf_width / 2 - 1; x++)
-	{
-		gint row_offset = 3 * x;
-
-		for (int y = 0; y < pixbuf_height; y++)
-		{
-			/* get the re and im parts for complex number
+		for (int y = 0; y < pixbuf_height; y++) {
+			/* get the re and im parts for the complex
 			 * located at the current pixel */
-			ax = x_min + width / pixbuf_width * x;
-			ay = y_min + height / pixbuf_height * y;
+			ax = center_x + width * ((double) x / (double) pixbuf_width - 0.5);
+			ay = center_y + height * ((double) y / (double) pixbuf_height - 0.5);
+			// ay = y_min + (height / pixbuf_height * y);
 			// printf("z = %f,%f\n", ax, ay);
 
 			iteration = 0;
@@ -183,8 +163,8 @@ update_pixbuf (GdkPixbuf *pixbuf,
 
 				iteration++;
 			}
-			// printf("%d iterations\n", iteration);
 
+			// printf("%d iterations\n", iteration);
 			gint position = y * rowstride + row_offset;
 			pixel = first_pixel + position;
 			pixel_mirrored = last_pixel - position;
@@ -237,10 +217,11 @@ main (int argc, char **argv)
 
 	/* Draw inital state to pixbuf */
 	struct julia_settings *settings = g_malloc (sizeof (struct julia_settings));
-	settings->x_min = -2;
-	settings->x_max = 2;
-	settings->y_min = -2;
-	settings->y_max = 2;
+	settings->center_x = 0;
+	settings->center_y = 0;
+	settings->default_width = 4;
+	settings->default_height = 4;
+	settings->zoom_level = 0;
 	settings->cx = CX;
 	settings->cy = CY;
 	settings->max_iterations = max_iterations;
