@@ -13,9 +13,20 @@
 #define PIXBUF_WIDTH  800
 
 /* TODO: Make values interactive */
-#define	CX -.4
-#define	CY .6
-#define MAX_ITERATIONS 120
+
+/* #define CX -.4 */
+/* #define CY .6 */
+
+/* #define CX -0.79 */
+/* #define CY 0.157 */
+
+/* #define CX -0.835 */
+/* #define CY -0.2321 */
+
+#define CX -0.7269
+#define CY +0.1889
+
+#define MAX_ITERATIONS 300
 
 static gboolean scroll_event_cb (GtkWidget *widget, GdkEventScroll *event, gpointer user_data);
 
