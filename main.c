@@ -12,9 +12,6 @@
 #define PIXBUF_HEIGHT 800
 #define PIXBUF_WIDTH  800
 
-/* Scaling when zooming in one step */
-#define ZOOM_FACTOR 0.9
-
 /* TODO: Make values interactive */
 #define	CX -.4
 #define	CY .6
