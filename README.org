@@ -1,6 +1,8 @@
 * julia-set-explorer
   (aka 'pretending there aren't enough of these applications yet!')
 
+  [[https://github.com/IMFTC/julia-set-explorer/raw/master/docs/screenshot.png]]
+
   A Julia set explorer written in C using gtk+.
   For now the focus is the well known function f(z) = z^2 + c.
 
