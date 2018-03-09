@@ -53,6 +53,8 @@ void julia_pixbuf_destroy (JuliaPixbuf *jsp);
 void julia_pixbuf_update (JuliaPixbuf *pixbuf,
 			  JuliaView *view);
 
+void julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view);
+
 JuliaView *julia_view_new (double center_re, double center_im,
 			   double default_width, double default_height,
 			   int zoom_level,

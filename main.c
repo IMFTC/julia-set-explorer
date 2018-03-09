@@ -24,7 +24,7 @@ button_press_event_cb (GtkWidget *widget,
 		       GdkEventButton *event,
 		       gpointer user_data)
 {
-  printf("GdkEventButton at (%f,%f)\n", event->x, event->y);
+  // printf("GdkEventButton at (%f,%f)\n", event->x, event->y);
 
   return TRUE;
 }
@@ -41,7 +41,7 @@ scroll_event_cb (GtkWidget *widget,
 		 GdkEventScroll *event,
 		 gpointer user_data)
 {
-  printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
+  // printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
 
   struct CallbackData *cb_data = (struct CallbackData*) user_data;
   JuliaPixbuf *jp = cb_data->jp;
@@ -60,8 +60,8 @@ scroll_event_cb (GtkWidget *widget,
     g_message("Unhandled scroll direction!");
   }
 
-  printf("Setting zoom level to %d\n", jv->zoom_level);
-  julia_pixbuf_update(jp, jv);
+  // printf("Setting zoom level to %d\n", jv->zoom_level);
+  julia_pixbuf_update_mt(jp, jv);
   gtk_image_set_from_pixbuf (image, pixbuf);
   /* stop further handling of event */
   return TRUE;
@@ -84,7 +84,7 @@ main (int argc, char **argv)
 
   jp = julia_pixbuf_new (PIXBUF_WIDTH, PIXBUF_HEIGHT);
   jv = julia_view_new (0, 0, 4, 4, 0, CX, CY, MAX_ITERATIONS);
-  julia_pixbuf_update(jp, jv);
+  julia_pixbuf_update_mt(jp, jv);
 
   struct CallbackData *cb_data = calloc (1, sizeof (struct CallbackData));
   cb_data->jp = jp;

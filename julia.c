@@ -1,7 +1,10 @@
 #include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
 #include <math.h>
+#include <pthread.h>
 
 #include "julia.h"
 
@@ -11,14 +14,25 @@ enum {
   BLUE
 };
 
+typedef struct _JuliaThreadArgs JuliaThreadArgs;
+
+struct _JuliaThreadArgs
+{
+  JuliaPixbuf *pixbuf;
+  JuliaView *view;
+  int thread;
+  int n_threads;
+};
+
 JuliaPixbuf *
 julia_pixbuf_new (int pix_width, int pix_height) {
   JuliaPixbuf *jp = calloc (1, sizeof (JuliaPixbuf));
 
-  if (jp == NULL) {
-    perror("julia_pixbuf_new");
-    exit (EXIT_FAILURE);
-  }
+  if (jp == NULL)
+    {
+      perror("julia_pixbuf_new");
+      exit (EXIT_FAILURE);
+    }
 
   jp->pix_height = pix_height;
   jp->pix_width = pix_width;
@@ -27,10 +41,11 @@ julia_pixbuf_new (int pix_width, int pix_height) {
   /* allocate pixbuf holding 3 bytes (RGB) per pixel */
   jp->pixbuf = calloc (1, jp->size);
 
-  if (jp == NULL) {
-    perror("julia_pixbuf_new");
-    exit (EXIT_FAILURE);
-  }
+  if (jp->pixbuf == NULL)
+    {
+      perror("julia_pixbuf_new");
+      exit (EXIT_FAILURE);
+    }
 
   return jp;
 }
@@ -38,13 +53,19 @@ julia_pixbuf_new (int pix_width, int pix_height) {
 void
 julia_pixbuf_destroy (JuliaPixbuf *jpixbuf)
 {
-  free(jpixbuf->pixbuf);
-  free(jpixbuf);
+  free (jpixbuf->pixbuf);
+  free (jpixbuf);
 }
 
-
-void julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view, int thread, int n_threads)
+void *
+julia_pixbuf_update_partial (void *data)
 {
+  JuliaThreadArgs *args = (JuliaThreadArgs *) data;
+  JuliaPixbuf *pixbuf = args->pixbuf;
+  JuliaView *view = args->view;
+  int thread = args->thread;
+  int n_threads = args->n_threads;
+
   /* unpack settings */
   unsigned char *pixel = pixbuf->pixbuf;
   int pix_height = pixbuf->pix_height;
@@ -71,6 +92,8 @@ void julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view, int thread, i
   double color_scale = 255. / max_iterations;
   char max_iter_color[3] = {0};
   unsigned char *first_pixel, *last_pixel, *mirrored_pixel;
+
+  // printf("thread number: %d\n", thread);
 
   /* Address of first byte of  pixel (one pixel is 3 bytes). */
   first_pixel = pixel;
@@ -110,27 +133,59 @@ void julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view, int thread, i
       if (iteration == max_iterations) {
 	memcpy(pixel, max_iter_color, 3);
 	memcpy(mirrored_pixel, max_iter_color, 3);
-	/* DEBUG: use some hue for the mirrored part: */
-	mirrored_pixel[RED] = 200;
+	/* DEBUG: use some hue for the mirrored/thread part: */
+	/* pixel[thread % 3] = 20; */
+	/* mirrored_pixel[thread % 3] = 100; */
       } else {
 	pixel[RED] = 255 - (color_scale * iteration);
 	pixel[GREEN] = pixel[RED];
 	pixel[BLUE] = pixel[RED];
 	memcpy(mirrored_pixel, pixel, 3);
 	/* DEBUG: use some hue for the mirrored part: */
-	mirrored_pixel[RED] = 200;
+	/* pixel[thread % 3] = 20; */
+	/* mirrored_pixel[thread % 3] = 100; */
       }
     }
   }
+
+  return NULL;
 }
 
 
+
+/* Updates @pixbuf according to @view using as many threads as there
+   are online CPUs. */
+void
+julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view)
+{
+  int n_threads = sysconf (_SC_NPROCESSORS_ONLN);
+
+  pthread_t *thread_ids = calloc (n_threads, sizeof (pthread_t));
+
+  JuliaThreadArgs *args = calloc (n_threads, sizeof (JuliaThreadArgs));
+
+  for (int i = 0; i < n_threads; i++)
+    {
+      args[i].pixbuf = pixbuf;
+      args[i].view = view;
+      args[i].thread = i;
+      args[i].n_threads = n_threads;
+
+      pthread_create (&thread_ids[i], NULL, julia_pixbuf_update_partial, &args[i]);
+    }
+
+  for (int i = 0; i < n_threads; i++)
+    {
+      pthread_join(thread_ids[i] , NULL);
+    }
+}
 
 /* Updates the content of @pixbuf according to @view. */
 void
 julia_pixbuf_update (JuliaPixbuf *pixbuf, JuliaView *view)
 {
-	julia_pixbuf_update_mt (pixbuf, view, 0, 1);
+  JuliaThreadArgs args = {pixbuf, view, 0, 1};
+  julia_pixbuf_update_partial ((void *) &args);
 }
 
 JuliaView *
@@ -142,10 +197,11 @@ julia_view_new (double center_re, double center_im,
 {
   JuliaView *jv = calloc (1, sizeof (JuliaView));
 
-  if (jv == NULL) {
-    perror("julia_pixbuf_new");
-    exit (EXIT_FAILURE);
-  }
+  if (jv == NULL)
+    {
+      perror("julia_pixbuf_new");
+      exit (EXIT_FAILURE);
+    }
 
   jv->center_re = center_re;
   jv->center_im = center_im;
