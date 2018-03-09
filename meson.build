@@ -5,4 +5,4 @@ gtkdep = dependency('gtk+-3.0')
 cc = meson.get_compiler('c')
 mdep = cc.find_library('m', required : false)
 
-executable('jse', 'main.c', dependencies : [gtkdep, mdep])
+executable('jse', 'main.c', 'julia.c', dependencies : [gtkdep, mdep])

@@ -4,6 +4,9 @@
 
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
+
+#include "julia.h"
 
 /* Use even numbers to allow mirroring! */
 #define PIXBUF_HEIGHT 800
@@ -17,246 +20,126 @@
 #define	CY .6
 #define MAX_ITERATIONS 120
 
-struct julia_settings {
-	/* Rectangle in the complex plane that will be drawn */
-	double center_x;
-	double center_y;
-
-	/* width and height for zoom level 0 */
-	double default_width;
-	double default_height;
-
-	int zoom_level;
-
-	/* Complex number c used in
-	 * z_(n+1) = (z_n)^2 + c
-	 */
-	double cx;
-	double cy;
-
-	gint max_iterations;
-};
-
-struct julia_set {
-	GtkImage *image;
-	struct julia_settings *settings;
-};
-
-enum {
-	RED = 0,
-	GREEN,
-	BLUE
-};
-
-static gboolean update_pixbuf (GdkPixbuf *pixbuf, struct julia_settings *settings);
 static gboolean scroll_event_cb (GtkWidget *widget, GdkEventScroll *event, gpointer user_data);
-static gboolean update_pixbuf (GdkPixbuf *pixbuf, struct julia_settings *settings);
 
 static gboolean
 button_press_event_cb (GtkWidget *widget,
 		       GdkEventButton *event,
 		       gpointer user_data)
 {
-	printf("GdkEventButton at (%f,%f)\n", event->x, event->y);
+  printf("GdkEventButton at (%f,%f)\n", event->x, event->y);
 
-	return TRUE;
+  return TRUE;
 }
+
+struct CallbackData
+{
+  JuliaPixbuf *jp;
+  JuliaView *jv;
+  GtkImage *image;
+};
 
 static gboolean
 scroll_event_cb (GtkWidget *widget,
 		 GdkEventScroll *event,
 		 gpointer user_data)
 {
-	printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
+  printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
 
-	struct julia_set *julia = (struct julia_set*) user_data;
-	GtkImage *image = julia->image;
-	GdkPixbuf *pixbuf = gtk_image_get_pixbuf (image);
-	struct julia_settings *settings = julia->settings;
+  struct CallbackData *cb_data = (struct CallbackData*) user_data;
+  JuliaPixbuf *jp = cb_data->jp;
+  JuliaView *jv = cb_data->jv;
+  GtkImage *image = cb_data->image;
+  GdkPixbuf *pixbuf = gtk_image_get_pixbuf (image);
 
-	switch (event->direction) {
-	case GDK_SCROLL_DOWN:
-		settings->zoom_level++;
-		break;
-	case GDK_SCROLL_UP:
-		settings->zoom_level--;
-		break;
-	default:
-		g_message("Unhandled scroll direction!");
-	}
+  switch (event->direction) {
+  case GDK_SCROLL_DOWN:
+    jv->zoom_level++;
+    break;
+  case GDK_SCROLL_UP:
+    jv->zoom_level--;
+    break;
+  default:
+    g_message("Unhandled scroll direction!");
+  }
 
-	printf("Setting zoom level to %d\n", settings->zoom_level);
-	update_pixbuf (pixbuf, settings);
-	gtk_image_set_from_pixbuf (image, pixbuf);
-	/* stop further handling of event */
-	return TRUE;
-}
-
-/* Draws the julia set for the rectangle between (x_min, y_min) and
- * (x_max, y_max). */
-static gboolean
-update_pixbuf (GdkPixbuf *pixbuf,
-	       struct julia_settings *settings)
-{
-	double center_x = settings->center_x;
-	double center_y = settings->center_y;
-
-	double default_width = settings->default_width;
-	double default_height = settings->default_height;
-	gint zoom_level = settings->zoom_level;
-
-	gint max_iterations = settings->max_iterations;
-	double cx = settings->cx;
-	double cy = settings->cy;
-
-	double ax, ay, aa, bb, _2ab;
-	guchar *first_pixel, *last_pixel, *pixel, *pixel_mirrored;
-	gsize pixbuf_size;
-	gint pixbuf_width, pixbuf_height, iteration, row_offset, rowstride;
-
-	/* Dimensions of the rectangle in the complex plane after
-	 * applying the zoom factor. */
-	double width = default_width * pow(ZOOM_FACTOR, zoom_level);
-	double height = default_height * pow(ZOOM_FACTOR, zoom_level);
-
-	char max_iter_color[3] = {0};
-	double color_scale = 255. / max_iterations;
-
-	pixbuf_width = gdk_pixbuf_get_width (pixbuf);
-	pixbuf_height = gdk_pixbuf_get_height (pixbuf);
-	pixbuf_size = gdk_pixbuf_get_byte_length (pixbuf);
-
-	/* Address of first byte of  pixel (one pixel is 3 bytes). */
-	first_pixel = gdk_pixbuf_get_pixels (pixbuf);
-	/* Address of first byte of last pixel (one pixel is 3 bytes). */
-	last_pixel = first_pixel + pixbuf_size - 3;
-
-	/* Number of bytes per line. */
-	rowstride = gdk_pixbuf_get_rowstride (pixbuf);
-
-	/* Update every pixel taking advantage of the symmetry by
-	 * filling the left and right half at once. */
-	for (int x = 0; x < pixbuf_width / 2; x++) {
-		row_offset = 3 * x;
-
-		for (int y = 0; y < pixbuf_height; y++) {
-			/* Get the re and im parts for the complex number
-			 * corresponding to the current pixel. */
-			ax = center_x + width * ((double) x / (double) pixbuf_width - 0.5);
-			ay = center_y + height * ((double) y / (double) pixbuf_height - 0.5);
-
-			iteration = 0;
-			while (iteration < max_iterations) {
-				aa = ax * ax;
-				bb = ay * ay;
-
-				/* Leave loop if |z_n| > 2 */
-				if (aa + bb > 4.)
-					break;
-
-				_2ab = 2.0 * ax * ay;
-				ax = aa - bb + cx;
-				ay = _2ab + cy;
-
-				iteration++;
-			}
-
-			gint position = y * rowstride + row_offset;
-			pixel = first_pixel + position;
-			pixel_mirrored = last_pixel - position;
-
-			if (iteration == max_iterations) {
-				memcpy(pixel, max_iter_color, 3);
-				memcpy(pixel_mirrored, max_iter_color, 3);
-				/* DEBUG: use some hue for the mirrored part: */
-				// pixel_mirrored[RED] = 200;
-			} else {
-				pixel[RED] = 255 - (color_scale * iteration);
-				pixel[GREEN] = pixel[RED];
-				pixel[BLUE] = pixel[RED];
-				memcpy(pixel_mirrored, pixel, 3);
-				/* DEBUG: use some hue for the mirrored part: */
-				// pixel_mirrored[RED] = 200;
-			}
-		}
-	}
-
-	return TRUE;
+  printf("Setting zoom level to %d\n", jv->zoom_level);
+  julia_pixbuf_update(jp, jv);
+  gtk_image_set_from_pixbuf (image, pixbuf);
+  /* stop further handling of event */
+  return TRUE;
 }
 
 int
 main (int argc, char **argv)
 {
-	GtkWidget *window;
-	GtkWidget *eventbox;
-	GtkWidget *image;
-	GdkPixbuf *pixbuf;
+  GtkWidget *window;
+  GtkWidget *eventbox;
+  GtkWidget *image;
+  GdkPixbuf *pixbuf;
+  JuliaPixbuf *jp;
+  JuliaView *jv;
 
-	int max_iterations;
+  gtk_init (&argc, &argv);
 
-	gtk_init (&argc, &argv);
+  window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_title (GTK_WINDOW (window), "Julia Set Explorer");
 
-	window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-	gtk_window_set_title (GTK_WINDOW (window), "Julia Set Explorer");
+  jp = julia_pixbuf_new (PIXBUF_WIDTH, PIXBUF_HEIGHT);
+  jv = julia_view_new (0, 0, 4, 4, 0, CX, CY, MAX_ITERATIONS);
+  julia_pixbuf_update(jp, jv);
 
-	pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB,
-				 FALSE,
-				 8,
-				 PIXBUF_WIDTH,
-				 PIXBUF_HEIGHT);
-	image = gtk_image_new_from_pixbuf (pixbuf);
+  struct CallbackData *cb_data = calloc (1, sizeof (struct CallbackData));
+  cb_data->jp = jp;
+  cb_data->jv = jv;
 
-	g_print("gdk_pixbuf_get_byte_length: %lu\n",
-		gdk_pixbuf_get_byte_length (pixbuf));
+  pixbuf = gdk_pixbuf_new_from_data (jp->pixbuf,
+				     GDK_COLORSPACE_RGB,
+				     FALSE,
+				     8,
+				     PIXBUF_WIDTH,
+				     PIXBUF_HEIGHT,
+				     PIXBUF_WIDTH * 3,
+				     NULL,
+				     NULL);
 
-	max_iterations = MAX_ITERATIONS;
+  image = gtk_image_new_from_pixbuf (pixbuf);
 
-	/* Draw inital state to pixbuf */
-	struct julia_settings *settings = g_malloc (sizeof (struct julia_settings));
-	settings->center_x = 0;
-	settings->center_y = 0;
-	settings->default_width = 4;
-	settings->default_height = 4;
-	settings->zoom_level = 0;
-	settings->cx = CX;
-	settings->cy = CY;
-	settings->max_iterations = max_iterations;
+  cb_data->image = GTK_IMAGE (image);
 
-	struct julia_set *jset = g_malloc (sizeof (struct julia_set));
-	jset->image = GTK_IMAGE (image);
-	jset->settings = settings;
+  g_print("gdk_pixbuf_get_byte_length: %lu\n",
+	  gdk_pixbuf_get_byte_length (pixbuf));
 
-	update_pixbuf(pixbuf, settings);
+  eventbox = gtk_event_box_new ();
+  /* FIXME: There is some padding around the image that should
+   * not be there and into which the eventbox expands. So the
+   * next two lines are needed to ensure the eventbox and the
+   * image share the same coordinates. */
+  gtk_widget_set_halign (eventbox, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (eventbox, GTK_ALIGN_CENTER);
 
-	eventbox = gtk_event_box_new ();
-	/* FIXME: There is some padding around the image that should
-	 * not be there and into which the eventbox expands. So the
-	 * next two lines are needed to ensure the eventbox and the
-	 * image share the same coordinates. */
-	gtk_widget_set_halign (eventbox, GTK_ALIGN_CENTER);
-	gtk_widget_set_valign (eventbox, GTK_ALIGN_CENTER);
+  // gtk_event_box_set_above_child(GTK_EVENT_BOX (eventbox), TRUE);
 
-	// gtk_event_box_set_above_child(GTK_EVENT_BOX (eventbox), TRUE);
+  gtk_container_add (GTK_CONTAINER (eventbox), image);
 
-	gtk_container_add (GTK_CONTAINER (eventbox), image);
+  /* GtkEventBox does not catch scroll events by default, add
+   * them manually since we use them for zooming. */
+  gtk_widget_add_events (eventbox, GDK_SCROLL_MASK);
 
-	/* GtkEventBox does not catch scroll events by default, add
-	 * them manually since we use them for zooming. */
-	gtk_widget_add_events (eventbox, GDK_SCROLL_MASK);
+  // g_signal_connect(window, "event", G_CALLBACK (scroll_event_cb), NULL);
+  g_signal_connect(eventbox, "scroll-event", G_CALLBACK (scroll_event_cb), cb_data);
+  g_signal_connect(eventbox, "button-press-event", G_CALLBACK (button_press_event_cb), cb_data);
 
-	// g_signal_connect(window, "event", G_CALLBACK (scroll_event_cb), NULL);
-	g_signal_connect(eventbox, "scroll-event", G_CALLBACK (scroll_event_cb), jset);
-	g_signal_connect(eventbox, "button-press-event", G_CALLBACK (button_press_event_cb), jset);
+  // g_signal_connect(eventbox, "key-press-event", G_CALLBACK (scroll_event_cb), NULL);
 
-	// g_signal_connect(eventbox, "key-press-event", G_CALLBACK (scroll_event_cb), NULL);
+  gtk_container_add (GTK_CONTAINER (window), eventbox);
+  gtk_widget_show_all (GTK_WIDGET (window));
 
-	gtk_container_add (GTK_CONTAINER (window), eventbox);
-	gtk_widget_show_all (GTK_WIDGET (window));
+  gtk_main();
 
-	gtk_main();
+  julia_pixbuf_destroy(jp);
+  julia_view_destroy(jv);
 
-	g_free (jset->settings);
-	g_free (jset);
 
-	return 0;
+  return 0;
 }
