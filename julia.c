@@ -42,9 +42,8 @@ julia_pixbuf_destroy (JuliaPixbuf *jpixbuf)
   free(jpixbuf);
 }
 
-/* Updates the content of @pixbuf according to @view. */
-void
-julia_pixbuf_update (JuliaPixbuf *pixbuf, JuliaView *view)
+
+void julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view, int thread, int n_threads)
 {
   /* unpack settings */
   unsigned char *pixel = pixbuf->pixbuf;
@@ -80,7 +79,7 @@ julia_pixbuf_update (JuliaPixbuf *pixbuf, JuliaView *view)
 
   /* Update every pixel taking advantage of the symmetry by filling
    * the left and right half at once. */
-  for (int x = 0; x < pix_width / 2; x++) {
+  for (int x = thread; x < pix_width / 2; x += n_threads) {
 
     for (int y = 0; y < pix_height; y++) {
       /* Get the re and im parts for the complex number corresponding
@@ -123,6 +122,15 @@ julia_pixbuf_update (JuliaPixbuf *pixbuf, JuliaView *view)
       }
     }
   }
+}
+
+
+
+/* Updates the content of @pixbuf according to @view. */
+void
+julia_pixbuf_update (JuliaPixbuf *pixbuf, JuliaView *view)
+{
+	julia_pixbuf_update_mt (pixbuf, view, 0, 1);
 }
 
 JuliaView *
