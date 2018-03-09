@@ -28,6 +28,8 @@
 
 #define MAX_ITERATIONS 300
 
+static GHashTable *hashtable;
+
 static gboolean scroll_event_cb (GtkWidget *widget, GdkEventScroll *event, gpointer user_data);
 
 static gboolean
@@ -58,7 +60,11 @@ scroll_event_cb (GtkWidget *widget,
   JuliaPixbuf *jp = cb_data->jp;
   JuliaView *jv = cb_data->jv;
   GtkImage *image = cb_data->image;
-  GdkPixbuf *pixbuf = gtk_image_get_pixbuf (image);
+  JuliaPixbuf *julia_pixbuf;
+  GdkPixbuf *gdk_pixbuf;
+
+  /* for the hashtable lookup */
+  gpointer orig_key, value;
 
   switch (event->direction) {
   case GDK_SCROLL_DOWN:
@@ -71,9 +77,40 @@ scroll_event_cb (GtkWidget *widget,
     g_message("Unhandled scroll direction!");
   }
 
+  if (g_hash_table_lookup_extended (hashtable,
+				    GINT_TO_POINTER (jv->zoom_level),
+				    &orig_key,
+				    &value))
+    {
+      /* hash table hit */
+      gdk_pixbuf = (GdkPixbuf *) value;
+    }
+  else
+    {
+      /* hash table miss */
+
+      /* create a new pixbuf for the new zoom value */
+      julia_pixbuf  = julia_pixbuf_new(jp->pix_height, jp->pix_width);
+      julia_pixbuf_update_mt (julia_pixbuf, jv);
+
+      gdk_pixbuf = gdk_pixbuf_new_from_data (julia_pixbuf->pixbuf,
+					     GDK_COLORSPACE_RGB,
+					     FALSE,
+					     8,
+					     julia_pixbuf->pix_width,
+					     julia_pixbuf->pix_height,
+					     julia_pixbuf->pix_width *3,
+					     NULL,
+					     NULL);
+
+      g_hash_table_insert (hashtable,
+			   GINT_TO_POINTER (jv->zoom_level),
+			   (gpointer) gdk_pixbuf);
+    };
+
+
   // printf("Setting zoom level to %d\n", jv->zoom_level);
-  julia_pixbuf_update_mt(jp, jv);
-  gtk_image_set_from_pixbuf (image, pixbuf);
+  gtk_image_set_from_pixbuf (image, gdk_pixbuf);
   /* stop further handling of event */
   return TRUE;
 }
@@ -142,6 +179,8 @@ main (int argc, char **argv)
 
   gtk_container_add (GTK_CONTAINER (window), eventbox);
   gtk_widget_show_all (GTK_WIDGET (window));
+
+  hashtable = g_hash_table_new (g_direct_hash, g_direct_equal);
 
   gtk_main();
 
