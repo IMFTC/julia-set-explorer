@@ -1,4 +1,5 @@
 * julia-set-explorer
+
   (aka 'pretending there aren't enough of these applications yet!')
 
   [[https://github.com/IMFTC/julia-set-explorer/raw/master/docs/screenshot.png]]
@@ -7,18 +8,32 @@
   For now the focus is the well known function f(z) = z^2 + c.
 
 ** *WARNING:* At this stage there is NO serious code here.
+
    So far it's just a sandbox for testing the very basic building
    blocks of a possible application.
 
 ** Goals:
+
    - Be fast!
      - use mirroring to reduce calculations whenever possible
      - use caching (uses a lot of memory, only meaningful in some
        cases)
      - use multithreading where possible (and sensible)
+     - provide functions for operating on any plain RGB pixel buffer
+       in memory
    - Good user experience
      - Create a UI for adjusting the value of c, the max. number of
        iterations, etc.
      - Allow easy navigation inside the Julia set
    - Meta
      - Use the meson build system
+
+** Status
+
+   - So far everything in the code is based on the assumption that the
+     point (0,0) of the complex plane is always at the center of the
+     view, so the user can not position the view yet. The reason for
+     this major simplification is that it allows mirroring of half of
+     the picture and efficient caching without using multiple tiles or
+     the like. Allowing to center the view at arbitrary positions will
+     be the next big step once the basics are working.
