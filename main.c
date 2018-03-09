@@ -12,6 +12,9 @@
 #define PIXBUF_HEIGHT 800
 #define PIXBUF_WIDTH  800
 
+#define MAX_ZOOM_LEVEL 200
+#define MIN_ZOOM_LEVEL -20
+
 /* TODO: Make values interactive */
 
 /* #define CX -.4 */
@@ -68,14 +71,23 @@ scroll_event_cb (GtkWidget *widget,
 
   switch (event->direction) {
   case GDK_SCROLL_DOWN:
-    jv->zoom_level++;
+    if (jv->zoom_level < MAX_ZOOM_LEVEL)
+      jv->zoom_level++;
+    else
+      g_debug ("Reached MAX_ZOOM_LEVEL of %d", MAX_ZOOM_LEVEL);
     break;
   case GDK_SCROLL_UP:
-    jv->zoom_level--;
+    if (jv->zoom_level > MIN_ZOOM_LEVEL)
+      jv->zoom_level-- ;
+    else
+      g_debug ("Reached MIN_ZOOM_LEVEL of %d", MIN_ZOOM_LEVEL);
+
     break;
   default:
     g_message("Unhandled scroll direction!");
   }
+
+  g_debug ("zoom level: %d", jv->zoom_level);
 
   if (g_hash_table_lookup_extended (hashtable,
 				    GINT_TO_POINTER (jv->zoom_level),
@@ -84,11 +96,13 @@ scroll_event_cb (GtkWidget *widget,
     {
       /* hash table hit */
       gdk_pixbuf = (GdkPixbuf *) value;
+      g_debug ("cache hit for zoom level %d", jv->zoom_level);
     }
   else
     {
       /* hash table miss */
 
+      g_debug ("cache miss for zoom level %d", jv->zoom_level);
       /* create a new pixbuf for the new zoom value */
       julia_pixbuf  = julia_pixbuf_new(jp->pix_height, jp->pix_width);
       julia_pixbuf_update_mt (julia_pixbuf, jv);
