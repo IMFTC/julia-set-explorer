@@ -151,8 +151,6 @@ julia_pixbuf_update_partial (void *data)
   return NULL;
 }
 
-
-
 /* Updates @pixbuf according to @view using as many threads as there
    are online CPUs. */
 void
@@ -161,7 +159,6 @@ julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view)
   int n_threads = sysconf (_SC_NPROCESSORS_ONLN);
 
   pthread_t *thread_ids = calloc (n_threads, sizeof (pthread_t));
-
   JuliaThreadArgs *args = calloc (n_threads, sizeof (JuliaThreadArgs));
 
   for (int i = 0; i < n_threads; i++)
@@ -178,6 +175,9 @@ julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view)
     {
       pthread_join(thread_ids[i] , NULL);
     }
+
+  free (thread_ids);
+  free (args);
 }
 
 /* Updates the content of @pixbuf according to @view. */
