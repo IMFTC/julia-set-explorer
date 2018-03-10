@@ -76,6 +76,7 @@ scroll_event_cb (GtkWidget *unused,
 
   JuliaPixbuf *julia_pixbuf;
   gpointer orig_key, value;
+  g_debug ("scroll_event_cb");
 
   switch (event->direction)
     {
@@ -83,13 +84,19 @@ scroll_event_cb (GtkWidget *unused,
       if (jv->zoom_level < MAX_ZOOM_LEVEL)
         jv->zoom_level++;
       else
-        g_debug ("Reached MAX_ZOOM_LEVEL of %d", MAX_ZOOM_LEVEL);
+        {
+          g_debug ("Reached MAX_ZOOM_LEVEL of %d", MAX_ZOOM_LEVEL);
+          return TRUE;
+        }
       break;
     case GDK_SCROLL_UP:
       if (jv->zoom_level > MIN_ZOOM_LEVEL)
         jv->zoom_level--;
       else
-        g_debug ("Reached MIN_ZOOM_LEVEL of %d", MIN_ZOOM_LEVEL);
+        {
+          g_debug ("Reached MIN_ZOOM_LEVEL of %d", MIN_ZOOM_LEVEL);
+          return TRUE;
+        }
       break;
     default:
       g_message ("Unhandled scroll direction!");
@@ -134,6 +141,7 @@ scroll_event_cb (GtkWidget *unused,
                            (gpointer) gdk_pixbuf);
     };
 
+  printf("setting image with zoom level %d\n", jv->zoom_level);
   gtk_image_set_from_pixbuf (image, gdk_pixbuf);
 
   /* stop further handling of event */
