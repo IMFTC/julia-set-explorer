@@ -140,8 +140,9 @@ scroll_event_cb (GtkWidget *unused,
   return TRUE;
 }
 
-int
-main (int argc, char **argv)
+static void
+activate (GtkApplication *app,
+          gpointer user_data)
 {
   GtkWidget *window;
   GtkWidget *eventbox;
@@ -150,9 +151,8 @@ main (int argc, char **argv)
   JuliaPixbuf *jp;
   JuliaView *jv;
 
-  gtk_init (&argc, &argv);
+  window = gtk_application_window_new (app);
 
-  window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title (GTK_WINDOW (window), "Julia Set Explorer");
 
   jp = julia_pixbuf_new (PIXBUF_WIDTH, PIXBUF_HEIGHT);
@@ -174,7 +174,6 @@ main (int argc, char **argv)
   julia_pixbuf_destroy (jp);
 
   /* insert pixbuf into hashtable */
-  hashtable = g_hash_table_new (g_direct_hash, g_direct_equal);
   g_hash_table_insert (hashtable,
                        GINT_TO_POINTER (0),
                        (gpointer) pixbuf);
@@ -207,17 +206,35 @@ main (int argc, char **argv)
   // g_signal_connect(window, "event", G_CALLBACK (scroll_event_cb), NULL);
   g_signal_connect(eventbox, "scroll-event", G_CALLBACK (scroll_event_cb), cb_data);
   g_signal_connect(eventbox, "key-press-event", G_CALLBACK (key_press_event_cb), cb_data);
-
   // g_signal_connect(eventbox, "key-press-event", G_CALLBACK (scroll_event_cb), NULL);
 
+  /* TODO: Cleanup */
+  // g_signal_connect(window, "delete-event", G_CALLBACK (key_press_event_cb), cb_data);
+
   gtk_container_add (GTK_CONTAINER (window), eventbox);
-  gtk_widget_show_all (GTK_WIDGET (window));
+  gtk_widget_show_all (window);
+}
 
-  gtk_main();
+int
+main (int    argc,
+      char **argv)
+{
 
-  julia_pixbuf_destroy(jp);
-  julia_view_destroy(jv);
+  GtkApplication *app;
+  int status;
 
+  app = gtk_application_new ("org.gnome.JuliaSetExplorer", G_APPLICATION_FLAGS_NONE);
+  g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
 
-  return 0;
+  hashtable = g_hash_table_new_full (g_direct_hash,
+                                     g_direct_equal,
+                                     NULL,
+                                     g_object_unref);
+
+  status = g_application_run (G_APPLICATION (app), argc, argv);
+
+  g_hash_table_destroy (hashtable);
+  g_object_unref (app);
+
+  return status;
 }
