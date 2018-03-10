@@ -45,22 +45,25 @@ struct _JuliaPixbuf
   int size;
 };
 
-JuliaPixbuf *julia_pixbuf_new (int pix_height,
-			       int pix_width);
-
-void julia_pixbuf_destroy (JuliaPixbuf *jsp);
+JuliaPixbuf *
+julia_pixbuf_new (int pix_height,
+                  int pix_width);
+void
+julia_pixbuf_destroy (JuliaPixbuf *jsp);
 
 void julia_pixbuf_update (JuliaPixbuf *pixbuf,
-			  JuliaView *view);
+                          JuliaView *view);
 
 void julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view);
 
-JuliaView *julia_view_new (double center_re, double center_im,
-			   double default_width, double default_height,
-			   int zoom_level,
-			   double c_re, double c_im,
-			   int max_iterations);
-
+JuliaView *julia_view_new (double center_re,
+                           double center_im,
+                           double default_width,
+                           double default_height,
+                           int zoom_level,
+                           double c_re,
+                           double c_im,
+                           int max_iterations);
 void julia_view_destroy (JuliaView *jv);
 
 #endif /* JULIA_H */

@@ -33,14 +33,15 @@
 
 static GHashTable *hashtable;
 
-static gboolean scroll_event_cb (GtkWidget *widget, GdkEventScroll *event, gpointer user_data);
+static gboolean scroll_event_cb (GtkWidget *widget,
+                                 GdkEventScroll *event,
+                                 gpointer user_data);
 
-static gboolean
-button_press_event_cb (GtkWidget *widget,
-		       GdkEventButton *event,
-		       gpointer user_data)
+static gboolean key_press_event_cb (GtkWidget *widget,
+                    GdkEventButton *event,
+                    gpointer user_data)
 {
-  // printf("GdkEventButton at (%f,%f)\n", event->x, event->y);
+  printf("GdkEventKey at (%f,%f)\n", event->x, event->y);
 
   return TRUE;
 }
@@ -54,11 +55,10 @@ struct CallbackData
 
 static gboolean
 scroll_event_cb (GtkWidget *widget,
-		 GdkEventScroll *event,
-		 gpointer user_data)
+                 GdkEventScroll *event,
+                 gpointer user_data)
 {
   // printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
-
   struct CallbackData *cb_data = (struct CallbackData*) user_data;
   JuliaPixbuf *jp = cb_data->jp;
   JuliaView *jv = cb_data->jv;
@@ -69,30 +69,30 @@ scroll_event_cb (GtkWidget *widget,
   /* for the hashtable lookup */
   gpointer orig_key, value;
 
-  switch (event->direction) {
-  case GDK_SCROLL_DOWN:
-    if (jv->zoom_level < MAX_ZOOM_LEVEL)
-      jv->zoom_level++;
-    else
-      g_debug ("Reached MAX_ZOOM_LEVEL of %d", MAX_ZOOM_LEVEL);
-    break;
-  case GDK_SCROLL_UP:
-    if (jv->zoom_level > MIN_ZOOM_LEVEL)
-      jv->zoom_level-- ;
-    else
-      g_debug ("Reached MIN_ZOOM_LEVEL of %d", MIN_ZOOM_LEVEL);
-
-    break;
-  default:
-    g_message("Unhandled scroll direction!");
-  }
+  switch (event->direction)
+    {
+    case GDK_SCROLL_DOWN:
+      if (jv->zoom_level < MAX_ZOOM_LEVEL)
+        jv->zoom_level++;
+      else
+        g_debug ("Reached MAX_ZOOM_LEVEL of %d", MAX_ZOOM_LEVEL);
+      break;
+    case GDK_SCROLL_UP:
+      if (jv->zoom_level > MIN_ZOOM_LEVEL)
+        jv->zoom_level-- ;
+      else
+        g_debug ("Reached MIN_ZOOM_LEVEL of %d", MIN_ZOOM_LEVEL);
+      break;
+    default:
+      g_message("Unhandled scroll direction!");
+    }
 
   g_debug ("zoom level: %d", jv->zoom_level);
 
   if (g_hash_table_lookup_extended (hashtable,
-				    GINT_TO_POINTER (jv->zoom_level),
-				    &orig_key,
-				    &value))
+                                    GINT_TO_POINTER (jv->zoom_level),
+                                    &orig_key,
+                                    &value))
     {
       /* hash table hit */
       gdk_pixbuf = (GdkPixbuf *) value;
@@ -108,24 +108,25 @@ scroll_event_cb (GtkWidget *widget,
       julia_pixbuf_update_mt (julia_pixbuf, jv);
 
       gdk_pixbuf = gdk_pixbuf_new_from_data (julia_pixbuf->pixbuf,
-					     GDK_COLORSPACE_RGB,
-					     FALSE,
-					     8,
-					     julia_pixbuf->pix_width,
-					     julia_pixbuf->pix_height,
-					     julia_pixbuf->pix_width *3,
-					     NULL,
-					     NULL);
+                                             GDK_COLORSPACE_RGB,
+                                             FALSE,
+                                             8,
+                                             julia_pixbuf->pix_width,
+                                             julia_pixbuf->pix_height,
+                                             julia_pixbuf->pix_width *3,
+                                             NULL,
+                                             NULL);
 
       g_hash_table_insert (hashtable,
-			   GINT_TO_POINTER (jv->zoom_level),
-			   (gpointer) gdk_pixbuf);
+                           GINT_TO_POINTER (jv->zoom_level),
+                           (gpointer) gdk_pixbuf);
     };
 
 
   // printf("Setting zoom level to %d\n", jv->zoom_level);
   gtk_image_set_from_pixbuf (image, gdk_pixbuf);
   /* stop further handling of event */
+
   return TRUE;
 }
 
@@ -153,21 +154,21 @@ main (int argc, char **argv)
   cb_data->jv = jv;
 
   pixbuf = gdk_pixbuf_new_from_data (jp->pixbuf,
-				     GDK_COLORSPACE_RGB,
-				     FALSE,
-				     8,
-				     PIXBUF_WIDTH,
-				     PIXBUF_HEIGHT,
-				     PIXBUF_WIDTH * 3,
-				     NULL,
-				     NULL);
+                                     GDK_COLORSPACE_RGB,
+                                     FALSE,
+                                     8,
+                                     PIXBUF_WIDTH,
+                                     PIXBUF_HEIGHT,
+                                     PIXBUF_WIDTH * 3,
+                                     NULL,
+                                     NULL);
 
   image = gtk_image_new_from_pixbuf (pixbuf);
 
   cb_data->image = GTK_IMAGE (image);
 
   g_print("gdk_pixbuf_get_byte_length: %lu\n",
-	  gdk_pixbuf_get_byte_length (pixbuf));
+          gdk_pixbuf_get_byte_length (pixbuf));
 
   eventbox = gtk_event_box_new ();
   /* FIXME: There is some padding around the image that should
@@ -187,7 +188,7 @@ main (int argc, char **argv)
 
   // g_signal_connect(window, "event", G_CALLBACK (scroll_event_cb), NULL);
   g_signal_connect(eventbox, "scroll-event", G_CALLBACK (scroll_event_cb), cb_data);
-  g_signal_connect(eventbox, "button-press-event", G_CALLBACK (button_press_event_cb), cb_data);
+  g_signal_connect(eventbox, "key-press-event", G_CALLBACK (key_press_event_cb), cb_data);
 
   // g_signal_connect(eventbox, "key-press-event", G_CALLBACK (scroll_event_cb), NULL);
 
@@ -195,6 +196,10 @@ main (int argc, char **argv)
   gtk_widget_show_all (GTK_WIDGET (window));
 
   hashtable = g_hash_table_new (g_direct_hash, g_direct_equal);
+
+  g_hash_table_insert (hashtable,
+                       GINT_TO_POINTER (0),
+                       (gpointer) pixbuf);
 
   gtk_main();
 

@@ -112,18 +112,18 @@ julia_pixbuf_update_partial (void *data)
 
       iteration = 0;
       while (iteration < max_iterations) {
-	a_2 = a_re * a_re;	/* = a^2 */
-	b_2 = a_im * a_im;	/* = b^2 */
+        a_2 = a_re * a_re;      /* = a^2 */
+        b_2 = a_im * a_im;      /* = b^2 */
 
-	/* Leave loop if |z_n| > 2 */
-	if (a_2 + b_2 > 4.)
-	  break;
+        /* Leave loop if |z_n| > 2 */
+        if (a_2 + b_2 > 4.)
+          break;
 
-	_2ab = 2.0 * a_re * a_im;
-	a_re = a_2 - b_2 + c_re;
-	a_im = _2ab + c_im;
+        _2ab = 2.0 * a_re * a_im;
+        a_re = a_2 - b_2 + c_re;
+        a_im = _2ab + c_im;
 
-	iteration++;
+        iteration++;
       }
 
       position = 3 * (y * pix_width + x);
@@ -131,19 +131,19 @@ julia_pixbuf_update_partial (void *data)
       mirrored_pixel = last_pixel - position;
 
       if (iteration == max_iterations) {
-	memcpy(pixel, max_iter_color, 3);
-	memcpy(mirrored_pixel, max_iter_color, 3);
-	/* DEBUG: use some hue for the mirrored/thread part: */
-	/* pixel[thread % 3] = 20; */
-	/* mirrored_pixel[thread % 3] = 100; */
+        memcpy(pixel, max_iter_color, 3);
+        memcpy(mirrored_pixel, max_iter_color, 3);
+        /* DEBUG: use some hue for the mirrored/thread part: */
+        /* pixel[thread % 3] = 20; */
+        /* mirrored_pixel[thread % 3] = 100; */
       } else {
-	pixel[RED] = 255 - (color_scale * iteration);
-	pixel[GREEN] = pixel[RED];
-	pixel[BLUE] = pixel[RED];
-	memcpy(mirrored_pixel, pixel, 3);
-	/* DEBUG: use some hue for the mirrored part: */
-	/* pixel[thread % 3] = 20; */
-	/* mirrored_pixel[thread % 3] = 100; */
+        pixel[RED] = 255 - (color_scale * iteration);
+        pixel[GREEN] = pixel[RED];
+        pixel[BLUE] = pixel[RED];
+        memcpy(mirrored_pixel, pixel, 3);
+        /* DEBUG: use some hue for the mirrored part: */
+        /* pixel[thread % 3] = 20; */
+        /* mirrored_pixel[thread % 3] = 100; */
       }
     }
   }
@@ -154,7 +154,8 @@ julia_pixbuf_update_partial (void *data)
 /* Updates @pixbuf according to @view using as many threads as there
    are online CPUs. */
 void
-julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view)
+julia_pixbuf_update_mt (JuliaPixbuf *pixbuf,
+                        JuliaView *view)
 {
   int n_threads = sysconf (_SC_NPROCESSORS_ONLN);
 
@@ -182,18 +183,22 @@ julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view)
 
 /* Updates the content of @pixbuf according to @view. */
 void
-julia_pixbuf_update (JuliaPixbuf *pixbuf, JuliaView *view)
+julia_pixbuf_update (JuliaPixbuf *pixbuf,
+                     JuliaView *view)
 {
   JuliaThreadArgs args = {pixbuf, view, 0, 1};
   julia_pixbuf_update_partial ((void *) &args);
 }
 
 JuliaView *
-julia_view_new (double center_re, double center_im,
-		double default_width, double default_height,
-		int zoom_level,
-		double c_re, double c_im,
-		int max_iterations)
+julia_view_new (double center_re,
+                double center_im,
+                double default_width,
+                double default_height,
+                int zoom_level,
+                double c_re,
+                double c_im,
+                int max_iterations)
 {
   JuliaView *jv = calloc (1, sizeof (JuliaView));
 
