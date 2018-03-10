@@ -25,7 +25,8 @@ struct _JuliaThreadArgs
 };
 
 JuliaPixbuf *
-julia_pixbuf_new (int pix_width, int pix_height) {
+julia_pixbuf_new (int pix_width, int pix_height)
+{
   JuliaPixbuf *jp = calloc (1, sizeof (JuliaPixbuf));
 
   if (jp == NULL)
@@ -34,9 +35,9 @@ julia_pixbuf_new (int pix_width, int pix_height) {
       exit (EXIT_FAILURE);
     }
 
-  jp->pix_height = pix_height;
   jp->pix_width = pix_width;
-  jp->size = pix_height * pix_width * 3;
+  jp->pix_height = pix_height;
+  jp->size = 3 *  pix_width * pix_height;
 
   /* allocate pixbuf holding 3 bytes (RGB) per pixel */
   jp->pixbuf = calloc (1, jp->size);
@@ -53,7 +54,8 @@ julia_pixbuf_new (int pix_width, int pix_height) {
 void
 julia_pixbuf_destroy (JuliaPixbuf *jpixbuf)
 {
-  free (jpixbuf->pixbuf);
+  if (jpixbuf->pixbuf)
+    free (jpixbuf->pixbuf);
   free (jpixbuf);
 }
 

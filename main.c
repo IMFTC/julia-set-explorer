@@ -56,25 +56,25 @@ static gboolean key_press_event_cb (GtkWidget *widget,
 
 struct CallbackData
 {
-  JuliaPixbuf *jp;
   JuliaView *jv;
   GtkImage *image;
 };
 
 static gboolean
-scroll_event_cb (GtkWidget *widget,
+scroll_event_cb (GtkWidget *unused,
                  GdkEventScroll *event,
                  gpointer user_data)
 {
   // printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
+
+  /* unpack user_data */
   struct CallbackData *cb_data = (struct CallbackData*) user_data;
-  JuliaPixbuf *jp = cb_data->jp;
   JuliaView *jv = cb_data->jv;
   GtkImage *image = cb_data->image;
-  JuliaPixbuf *julia_pixbuf;
-  GdkPixbuf *gdk_pixbuf;
 
-  /* for the hashtable lookup */
+  GdkPixbuf *gdk_pixbuf = gtk_image_get_pixbuf (image);
+
+  JuliaPixbuf *julia_pixbuf;
   gpointer orig_key, value;
 
   switch (event->direction)
@@ -87,12 +87,12 @@ scroll_event_cb (GtkWidget *widget,
       break;
     case GDK_SCROLL_UP:
       if (jv->zoom_level > MIN_ZOOM_LEVEL)
-        jv->zoom_level-- ;
+        jv->zoom_level--;
       else
         g_debug ("Reached MIN_ZOOM_LEVEL of %d", MIN_ZOOM_LEVEL);
       break;
     default:
-      g_message("Unhandled scroll direction!");
+      g_message ("Unhandled scroll direction!");
     }
 
   g_debug ("zoom level: %d", jv->zoom_level);
@@ -103,17 +103,19 @@ scroll_event_cb (GtkWidget *widget,
                                     &value))
     {
       /* hash table hit */
+
       gdk_pixbuf = (GdkPixbuf *) value;
       g_debug ("Cache hit for zoom level %d", jv->zoom_level);
     }
   else
     {
       /* hash table miss */
+
       g_debug ("Cache miss for zoom level %d", jv->zoom_level);
       /* create a new pixbuf for the new zoom value */
-      julia_pixbuf  = julia_pixbuf_new(jp->pix_height, jp->pix_width);
+      julia_pixbuf = julia_pixbuf_new (gdk_pixbuf_get_width (gdk_pixbuf),
+                                       gdk_pixbuf_get_height (gdk_pixbuf));
       julia_pixbuf_update_mt (julia_pixbuf, jv);
-
 
       /* transfer ownership of julia_pixbuf->pixbuf to gdk_pixbuf */
       gdk_pixbuf = gdk_pixbuf_new_from_data (julia_pixbuf->pixbuf,
@@ -122,12 +124,9 @@ scroll_event_cb (GtkWidget *widget,
                                              8,
                                              julia_pixbuf->pix_width,
                                              julia_pixbuf->pix_height,
-                                             julia_pixbuf->pix_width *3,
+                                             julia_pixbuf->pix_width * 3,
                                              pixbuf_destroy_notify,
                                              NULL);
-
-      /* only free the struct but not the corresponding pixbuf which
-         is now owned gdk_pixbuf */
       free (julia_pixbuf);
 
       g_hash_table_insert (hashtable,
@@ -160,10 +159,7 @@ main (int argc, char **argv)
   jv = julia_view_new (0, 0, 4, 4, 0, CX, CY, MAX_ITERATIONS);
   julia_pixbuf_update_mt(jp, jv);
 
-  struct CallbackData *cb_data = calloc (1, sizeof (struct CallbackData));
-  cb_data->jp = jp;
-  cb_data->jv = jv;
-
+  /* move ownership of jp->pixbuf to GdkPixbuf pixbuf */
   pixbuf = gdk_pixbuf_new_from_data (jp->pixbuf,
                                      GDK_COLORSPACE_RGB,
                                      FALSE,
@@ -171,22 +167,22 @@ main (int argc, char **argv)
                                      PIXBUF_WIDTH,
                                      PIXBUF_HEIGHT,
                                      PIXBUF_WIDTH * 3,
-                                     NULL,
+                                     pixbuf_destroy_notify,
                                      NULL);
+  jp->pixbuf = NULL;
 
-  /* only free the struct but not the corresponding pixbuf which
-     is now owned gdk_pixbuf */
-  free (julia_pixbuf);
+  julia_pixbuf_destroy (jp);
 
-  /* insert pixbuf to hashtable */
+  /* insert pixbuf into hashtable */
   hashtable = g_hash_table_new (g_direct_hash, g_direct_equal);
   g_hash_table_insert (hashtable,
                        GINT_TO_POINTER (0),
                        (gpointer) pixbuf);
 
-
   image = gtk_image_new_from_pixbuf (pixbuf);
 
+  struct CallbackData *cb_data = calloc (1, sizeof (struct CallbackData));
+  cb_data->jv = jv;
   cb_data->image = GTK_IMAGE (image);
 
   g_print("gdk_pixbuf_get_byte_length: %lu\n",
