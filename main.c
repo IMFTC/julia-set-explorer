@@ -173,11 +173,17 @@ main (int argc, char **argv)
                                      PIXBUF_WIDTH * 3,
                                      NULL,
                                      NULL);
+
+  /* only free the struct but not the corresponding pixbuf which
+     is now owned gdk_pixbuf */
+  free (julia_pixbuf);
+
   /* insert pixbuf to hashtable */
   hashtable = g_hash_table_new (g_direct_hash, g_direct_equal);
   g_hash_table_insert (hashtable,
                        GINT_TO_POINTER (0),
                        (gpointer) pixbuf);
+
 
   image = gtk_image_new_from_pixbuf (pixbuf);
 
