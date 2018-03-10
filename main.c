@@ -37,9 +37,17 @@ static gboolean scroll_event_cb (GtkWidget *widget,
                                  GdkEventScroll *event,
                                  gpointer user_data);
 
+void
+pixbuf_destroy_notify (guchar *pixels,
+                       gpointer data)
+{
+  g_debug ("Freeing pixel data at %p", pixels);
+  g_free (pixels);
+}
+
 static gboolean key_press_event_cb (GtkWidget *widget,
-                    GdkEventButton *event,
-                    gpointer user_data)
+                                    GdkEventButton *event,
+                                    gpointer user_data)
 {
   printf("GdkEventKey at (%f,%f)\n", event->x, event->y);
 
@@ -96,17 +104,18 @@ scroll_event_cb (GtkWidget *widget,
     {
       /* hash table hit */
       gdk_pixbuf = (GdkPixbuf *) value;
-      g_debug ("cache hit for zoom level %d", jv->zoom_level);
+      g_debug ("Cache hit for zoom level %d", jv->zoom_level);
     }
   else
     {
       /* hash table miss */
-
-      g_debug ("cache miss for zoom level %d", jv->zoom_level);
+      g_debug ("Cache miss for zoom level %d", jv->zoom_level);
       /* create a new pixbuf for the new zoom value */
       julia_pixbuf  = julia_pixbuf_new(jp->pix_height, jp->pix_width);
       julia_pixbuf_update_mt (julia_pixbuf, jv);
 
+
+      /* transfer ownership of julia_pixbuf->pixbuf to gdk_pixbuf */
       gdk_pixbuf = gdk_pixbuf_new_from_data (julia_pixbuf->pixbuf,
                                              GDK_COLORSPACE_RGB,
                                              FALSE,
@@ -114,19 +123,21 @@ scroll_event_cb (GtkWidget *widget,
                                              julia_pixbuf->pix_width,
                                              julia_pixbuf->pix_height,
                                              julia_pixbuf->pix_width *3,
-                                             NULL,
+                                             pixbuf_destroy_notify,
                                              NULL);
+
+      /* only free the struct but not the corresponding pixbuf which
+         is now owned gdk_pixbuf */
+      free (julia_pixbuf);
 
       g_hash_table_insert (hashtable,
                            GINT_TO_POINTER (jv->zoom_level),
                            (gpointer) gdk_pixbuf);
     };
 
-
-  // printf("Setting zoom level to %d\n", jv->zoom_level);
   gtk_image_set_from_pixbuf (image, gdk_pixbuf);
-  /* stop further handling of event */
 
+  /* stop further handling of event */
   return TRUE;
 }
 
@@ -162,6 +173,11 @@ main (int argc, char **argv)
                                      PIXBUF_WIDTH * 3,
                                      NULL,
                                      NULL);
+  /* insert pixbuf to hashtable */
+  hashtable = g_hash_table_new (g_direct_hash, g_direct_equal);
+  g_hash_table_insert (hashtable,
+                       GINT_TO_POINTER (0),
+                       (gpointer) pixbuf);
 
   image = gtk_image_new_from_pixbuf (pixbuf);
 
@@ -194,12 +210,6 @@ main (int argc, char **argv)
 
   gtk_container_add (GTK_CONTAINER (window), eventbox);
   gtk_widget_show_all (GTK_WIDGET (window));
-
-  hashtable = g_hash_table_new (g_direct_hash, g_direct_equal);
-
-  g_hash_table_insert (hashtable,
-                       GINT_TO_POINTER (0),
-                       (gpointer) pixbuf);
 
   gtk_main();
 
