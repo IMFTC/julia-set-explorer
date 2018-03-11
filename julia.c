@@ -76,12 +76,9 @@ julia_pixbuf_update_partial (void *data)
 
   double center_re = view->center_re;
   double center_im = view->center_im;
-
-  int zoom_level = view->zoom_level;
-
   double c_re = view->c_re;
   double c_im = view->c_im;
-
+  int zoom_level = view->zoom_level;
   int max_iterations = view->max_iterations;
 
   /* Dimensions of the rectangle in the complex plane after
