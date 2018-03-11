@@ -34,9 +34,9 @@
 
 static GHashTable *hashtable;
 
-static gboolean scroll_event_cb (GtkWidget *widget,
-                                 GdkEventScroll *event,
-                                 gpointer user_data);
+static gboolean image_scroll_event_cb (GtkWidget *widget,
+                                       GdkEventScroll *event,
+                                       gpointer user_data);
 
 void
 pixbuf_destroy_notify (guchar *pixels,
@@ -62,11 +62,11 @@ struct CallbackData
 };
 
 static gboolean
-scroll_event_cb (GtkWidget *unused,
-                 GdkEventScroll *event,
-                 gpointer user_data)
+image_scroll_event_cb (GtkWidget *unused,
+                       GdkEventScroll *event,
+                       gpointer user_data)
 {
-  // printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
+  printf("Got GdkEventScroll at (%3f, %3f)\n", event->x, event->y);
 
   /* unpack user_data */
   struct CallbackData *cb_data = (struct CallbackData*) user_data;
@@ -77,7 +77,7 @@ scroll_event_cb (GtkWidget *unused,
 
   JuliaPixbuf *julia_pixbuf;
   gpointer orig_key, value;
-  g_debug ("scroll_event_cb");
+  g_debug ("image_scroll_event_cb");
 
   switch (event->direction)
     {
@@ -153,16 +153,13 @@ static void
 activate (GtkApplication *app,
           gpointer user_data)
 {
-  GtkWidget *window;
-  GtkWidget *eventbox;
-  GtkWidget *image;
+  JseWindow *window;
+  GtkImage *image;
   GdkPixbuf *pixbuf;
   JuliaPixbuf *jp;
   JuliaView *jv;
 
-  window = gtk_application_window_new (app);
-
-  gtk_window_set_title (GTK_WINDOW (window), "Julia Set Explorer");
+  window = jse_window_new (app);
 
   jp = julia_pixbuf_new (PIXBUF_WIDTH, PIXBUF_HEIGHT);
   jv = julia_view_new (0, 0, 4, 4, 0, CX, CY, MAX_ITERATIONS);
@@ -187,44 +184,18 @@ activate (GtkApplication *app,
                        GINT_TO_POINTER (0),
                        (gpointer) pixbuf);
 
-  image = gtk_image_new_from_pixbuf (pixbuf);
+  image = GTK_IMAGE (gtk_image_new_from_pixbuf (pixbuf));
+  gtk_widget_set_visible (GTK_WIDGET (image), TRUE);
+  jse_window_set_image (window, image);
 
   struct CallbackData *cb_data = calloc (1, sizeof (struct CallbackData));
   cb_data->jv = jv;
-  cb_data->image = GTK_IMAGE (image);
+  cb_data->image = image;
 
   g_print("gdk_pixbuf_get_byte_length: %lu\n",
           gdk_pixbuf_get_byte_length (pixbuf));
 
-  eventbox = gtk_event_box_new ();
-  /* FIXME: There is some padding around the image that should
-   * not be there and into which the eventbox expands. So the
-   * next two lines are needed to ensure the eventbox and the
-   * image share the same coordinates. */
-  gtk_widget_set_halign (eventbox, GTK_ALIGN_CENTER);
-  gtk_widget_set_valign (eventbox, GTK_ALIGN_CENTER);
-
-  // gtk_event_box_set_above_child(GTK_EVENT_BOX (eventbox), TRUE);
-
-  gtk_container_add (GTK_CONTAINER (eventbox), image);
-
-  /* GtkEventBox does not catch scroll events by default, add
-   * them manually since we use them for zooming. */
-  gtk_widget_add_events (eventbox, GDK_SCROLL_MASK);
-
-  // g_signal_connect(window, "event", G_CALLBACK (scroll_event_cb), NULL);
-  g_signal_connect(eventbox, "scroll-event", G_CALLBACK (scroll_event_cb), cb_data);
-  g_signal_connect(eventbox, "key-press-event", G_CALLBACK (key_press_event_cb), cb_data);
-  // g_signal_connect(eventbox, "key-press-event", G_CALLBACK (scroll_event_cb), NULL);
-
-  /* TODO: Cleanup */
-  // g_signal_connect(window, "delete-event", G_CALLBACK (key_press_event_cb), cb_data);
-
-  gtk_container_add (GTK_CONTAINER (window), eventbox);
-  gtk_widget_show_all (window);
-
-  JseWindow *test = jse_window_new (app);
-  gtk_widget_show_all (GTK_WIDGET (test));
+  gtk_widget_show (GTK_WIDGET (window));
 }
 
 int
