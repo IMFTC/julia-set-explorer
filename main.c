@@ -7,6 +7,7 @@
 #include <stdlib.h>
 
 #include "julia.h"
+#include "jse-window.h"
 
 /* Use even numbers to allow mirroring! */
 #define PIXBUF_HEIGHT 800
