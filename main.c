@@ -222,6 +222,9 @@ activate (GtkApplication *app,
 
   gtk_container_add (GTK_CONTAINER (window), eventbox);
   gtk_widget_show_all (window);
+
+  JseWindow *test = jse_window_new (app);
+  gtk_widget_show_all (GTK_WIDGET (test));
 }
 
 int
