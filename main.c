@@ -141,7 +141,7 @@ scroll_event_cb (GtkWidget *unused,
                            (gpointer) gdk_pixbuf);
     };
 
-  printf("setting image with zoom level %d\n", jv->zoom_level);
+  g_debug ("setting image with zoom level %d", jv->zoom_level);
   gtk_image_set_from_pixbuf (image, gdk_pixbuf);
 
   /* stop further handling of event */
