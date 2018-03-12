@@ -248,7 +248,7 @@ update_position_label (JseWindow *win, gdouble x, gdouble y)
 
   GString *text = g_string_new (NULL);
 
-  g_string_printf (text, "pos: %+8f %+8fi", pos_re, pos_im);
+  g_string_printf (text, "pos: %+.15f %+1.15fi", pos_re, pos_im);
   gtk_label_set_text (GTK_LABEL (win->label_position), text->str);
   g_string_free (text, TRUE);
 }
