@@ -89,7 +89,12 @@ static void
 jse_window_dispose (GObject *object)
 {
   JseWindow *window = JSE_WINDOW (object);
-  julia_view_destroy (window->jv);
+
+  g_debug ("jse_window_dispose (%p)", object);
+
+  /* this function may be called multiple times, guard against that */
+  g_clear_pointer (&window->jv, julia_view_destroy);
+  g_clear_pointer (&window->hashtable, g_hash_table_destroy);
 
   G_OBJECT_CLASS (jse_window_parent_class)->dispose (object);
 }
