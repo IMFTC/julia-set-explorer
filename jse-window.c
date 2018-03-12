@@ -14,8 +14,16 @@
 #define MIN_ZOOM_LEVEL -20
 #define MAX_ITERATIONS 300
 
-#define CX -0.7269
-#define CY +0.1889
+/* TODO: The user should be able to set these! */
+/* The view of the complex plane to be displayed by the window */
+#define VIEW_WIDTH 4
+#define VIEW_HEIGHT 4
+/* TODO: This MUST be (0, 0) for now since we assume symmetry */
+#define VIEW_CENTER_RE 0
+#define VIEW_CENTER_IM 0
+/* c as in f(z) = z^2 + c */
+#define C_RE -0.7269
+#define C_IM +0.1889
 
 struct _JseWindow
 {
@@ -67,7 +75,10 @@ jse_window_init (JseWindow *window)
                          // | GDK_SMOOTH_SCROLL_MASK
                          | GDK_POINTER_MOTION_MASK);
 
-  window->jv = julia_view_new (0, 0, 4, 4, 0, CX, CY, MAX_ITERATIONS);
+  window->jv = julia_view_new (VIEW_CENTER_RE, VIEW_CENTER_IM,
+                               VIEW_WIDTH, VIEW_HEIGHT, 0,
+                               C_RE, C_IM, MAX_ITERATIONS);
+
   window->pixbuf_width = PIXBUF_WIDTH;
   window->pixbuf_height = PIXBUF_HEIGHT;
   /* TODO: make jv a property of the window */
