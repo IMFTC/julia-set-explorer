@@ -2,6 +2,7 @@
 #define __JSE_WINDOW_H__
 
 #include <gtk/gtk.h>
+#include "julia.h"
 
 #define JSE_TYPE_WINDOW (jse_window_get_type ())
 G_DECLARE_FINAL_TYPE (JseWindow, jse_window, JSE, WINDOW, GtkApplicationWindow)

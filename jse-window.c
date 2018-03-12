@@ -1,13 +1,26 @@
 #include <gtk/gtk.h>
 
 #include "jse-window.h"
+#include "julia.h"
+
+/* TODO: Move to a better place / remove hard-coding */
+#define PIXBUF_HEIGHT 800
+#define PIXBUF_WIDTH  800
+
+#define MAX_ZOOM_LEVEL 200
+#define MIN_ZOOM_LEVEL -20
+#define MAX_ITERATIONS 300
+
+#define CX -0.7269
+#define CY +0.1889
 
 struct _JseWindow
 {
   GtkApplicationWindow parent;
 
-  GtkApplication *app;
-  GtkImage *eventbox;
+  GtkWidget *eventbox;
+  JuliaView *jv;
+  GHashTable *hashtable;
 };
 
 /* final types don't need private data */
@@ -16,18 +29,59 @@ G_DEFINE_TYPE (JseWindow, jse_window, GTK_TYPE_APPLICATION_WINDOW);
 static gboolean image_scroll_event_cb (GtkWidget *unused,
                                        GdkEventScroll *event,
                                        gpointer user_data);
+static void pixbuf_destroy_notify (guchar *pixels,
+                                   gpointer data);
 
 
 static void
 jse_window_init (JseWindow *window)
 {
+  GdkPixbuf *pixbuf;
+  JuliaPixbuf *jp;
+  GtkImage *image;
+  JuliaView *jv;
+
   gtk_widget_init_template (GTK_WIDGET (window));
+
+  window->hashtable = g_hash_table_new_full (g_direct_hash,
+                                             g_direct_equal,
+                                             NULL,
+                                             g_object_unref);
+
+  /* TODO: make jv a property of the window */
+  jv = julia_view_new (0, 0, 4, 4, 0, CX, CY, MAX_ITERATIONS);
+  jp = julia_pixbuf_new (PIXBUF_WIDTH, PIXBUF_HEIGHT);
+  julia_pixbuf_update_mt(jp, jv);
+
+  /* move ownership of jp->pixbuf to GdkPixbuf pixbuf */
+  pixbuf = gdk_pixbuf_new_from_data (jp->pixbuf,
+                                     GDK_COLORSPACE_RGB,
+                                     FALSE,
+                                     8,
+                                     PIXBUF_WIDTH,
+                                     PIXBUF_HEIGHT,
+                                     PIXBUF_WIDTH * 3,
+                                     pixbuf_destroy_notify,
+                                     NULL);
+  jp->pixbuf = NULL;
+  julia_pixbuf_destroy (jp);
+
+  image = GTK_IMAGE (gtk_image_new_from_pixbuf (pixbuf));
+  gtk_widget_set_visible (GTK_WIDGET (image), TRUE);
+  gtk_container_add (GTK_CONTAINER (window->eventbox), GTK_WIDGET (image));
+  gtk_widget_add_events (GTK_WIDGET (window->eventbox), GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
+
+  /* insert pixbuf into hashtable */
+  g_hash_table_insert (window->hashtable,
+                       GINT_TO_POINTER (0),
+                       (gpointer) pixbuf);
 }
 
 static void
 jse_window_dispose (GObject *object)
 {
-  /* TODO: clear private objects once we have some */
+  JseWindow *window = JSE_WINDOW (object);
+  julia_view_destroy (window->jv);
 
   G_OBJECT_CLASS (jse_window_parent_class)->dispose (object);
 }
@@ -38,20 +92,16 @@ jse_window_class_init (JseWindowClass *class)
   G_OBJECT_CLASS (class)->dispose = jse_window_dispose;
   gtk_widget_class_set_template_from_resource (GTK_WIDGET_CLASS (class),
                                                "/org/gnome/jse/window.ui");
-  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class),
-                                        JseWindow, eventbox);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, eventbox);
+  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_scroll_event_cb);
 }
 
 JseWindow *
 jse_window_new (GtkApplication *app)
 {
-  return g_object_new (JSE_TYPE_WINDOW, "application", app, NULL);
-}
-
-void
-jse_window_set_image (struct _JseWindow *win, GtkImage *img)
-{
-  gtk_container_add (GTK_CONTAINER (win->eventbox), GTK_WIDGET (img));
+  return g_object_new (JSE_TYPE_WINDOW,
+                       "application", app,
+                       NULL);
 }
 
 static gboolean
@@ -140,4 +190,13 @@ image_scroll_event_cb (GtkWidget *unused,
 
   /* stop further handling of event */
   return TRUE;
+}
+
+
+static void
+pixbuf_destroy_notify (guchar *pixels,
+                       gpointer data)
+{
+  g_debug ("Freeing pixel data at %p", pixels);
+  g_free (pixels);
 }
