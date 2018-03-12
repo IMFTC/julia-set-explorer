@@ -226,7 +226,7 @@ update_position_label (JseWindow *win, gdouble x, gdouble y)
   double height = jv->default_height * pow(ZOOM_FACTOR, zoom_level);
 
   double pos_re = jv->center_re + width * (x / PIXBUF_WIDTH - 0.5);
-  double pos_im = jv->center_im + height * (y / PIXBUF_HEIGHT - 0.5);
+  double pos_im = jv->center_im + height * (0.5 - y / PIXBUF_HEIGHT);
 
   GString *text = g_string_new (NULL);
 

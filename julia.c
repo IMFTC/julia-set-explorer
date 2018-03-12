@@ -107,7 +107,7 @@ julia_pixbuf_update_partial (void *data)
       /* Get the re and im parts for the complex number corresponding
        * to the current pixel. */
       a_re = center_re + width * ((double) x / (double) pix_width - 0.5);
-      a_im = center_im + height * ((double) y / (double) pix_height - 0.5);
+      a_im = center_im + height * (0.5 - (double) y / (double) pix_height);
 
       iteration = 0;
       while (iteration < max_iterations) {
