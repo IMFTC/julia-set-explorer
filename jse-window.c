@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "jse-window.h"
 #include "julia.h"
@@ -23,6 +24,8 @@ struct _JseWindow
   GtkImage *image;
 
   GdkPixbuf *gdk_pixbuf;
+  gint pixbuf_width;
+  gint pixbuf_height;
 
   JuliaView *jv;
   GHashTable *hashtable;
@@ -210,12 +213,32 @@ image_scroll_event_cb (GtkWidget *unused,
   return TRUE;
 }
 
-static
-gboolean image_motion_notify_event_cb (JseWindow *win,
-                                       GdkEventMotion *event)
+static void
+update_position_label (JseWindow *win, gdouble x, gdouble y)
+{
+  JuliaView *jv = win->jv;
+  int zoom_level = jv->zoom_level;
+
+  double width = jv->default_width * pow(ZOOM_FACTOR, zoom_level);
+  double height = jv->default_height * pow(ZOOM_FACTOR, zoom_level);
+
+  double pos_re = jv->center_re + width * (x / PIXBUF_WIDTH - 0.5);
+  double pos_im = jv->center_im + height * (y / PIXBUF_HEIGHT - 0.5);
+
+  GString *text = g_string_new (NULL);
+  g_string_printf (text, "pos: %+8.3f %+8.3fi", pos_re, pos_im);
+  gtk_label_set_text (GTK_LABEL (win->label_position), text->str);
+  g_string_free (text, TRUE);
+}
+
+static gboolean
+image_motion_notify_event_cb (JseWindow *win,
+                              GdkEventMotion *event)
 
 {
   g_debug ("motion-notify event at (%f, %f)", event->x, event->y);
+
+  update_position_label (win, event->x, event->y);
 
   return TRUE;
 }
