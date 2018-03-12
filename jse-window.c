@@ -43,6 +43,9 @@ static gboolean image_motion_notify_event_cb (JseWindow *win,
                                               GdkEventMotion *event);
 static void pixbuf_destroy_notify (guchar *pixels,
                                    gpointer data);
+static void update_position_label (JseWindow *win,
+                                   gdouble x,
+                                   gdouble y);
 
 static void
 jse_window_init (JseWindow *window)
@@ -128,8 +131,7 @@ image_scroll_event_cb (GtkWidget *unused,
                        GdkEventScroll *event,
                        JseWindow *window)
 {
-  g_debug ("Got GdkEventScroll at (%3f, %3f)", event->x, event->y);
-
+  g_debug ("scroll-event at (%3f, %3f)", event->x, event->y);
 
   JuliaView *jv = window->jv;
   GHashTable *hashtable = window->hashtable;
@@ -208,7 +210,7 @@ image_scroll_event_cb (GtkWidget *unused,
     };
 
   gtk_image_set_from_pixbuf (image, gdk_pixbuf);
-
+  update_position_label (window, event->x, event->y);
   /* stop further handling of event */
   return TRUE;
 }
@@ -216,6 +218,7 @@ image_scroll_event_cb (GtkWidget *unused,
 static void
 update_position_label (JseWindow *win, gdouble x, gdouble y)
 {
+  /* TODO: Reduce calculations by saving values somewhere */
   JuliaView *jv = win->jv;
   int zoom_level = jv->zoom_level;
 
@@ -226,7 +229,8 @@ update_position_label (JseWindow *win, gdouble x, gdouble y)
   double pos_im = jv->center_im + height * (y / PIXBUF_HEIGHT - 0.5);
 
   GString *text = g_string_new (NULL);
-  g_string_printf (text, "pos: %+8.3f %+8.3fi", pos_re, pos_im);
+
+  g_string_printf (text, "pos: %+8f %+8fi", pos_re, pos_im);
   gtk_label_set_text (GTK_LABEL (win->label_position), text->str);
   g_string_free (text, TRUE);
 }
