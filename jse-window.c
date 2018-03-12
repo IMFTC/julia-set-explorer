@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 #include "jse-window.h"
 #include "julia.h"
@@ -23,7 +24,7 @@ struct _JseWindow
   GtkWidget *eventbox;
   GtkImage *image;
 
-  GdkPixbuf *gdk_pixbuf;
+  /* GdkPixbuf *gdk_pixbuf; */
   gint pixbuf_width;
   gint pixbuf_height;
 
@@ -46,14 +47,13 @@ static void pixbuf_destroy_notify (guchar *pixels,
 static void update_position_label (JseWindow *win,
                                    gdouble x,
                                    gdouble y);
+void jse_window_set_zoom_level (JseWindow *win,
+                                gint zoom_level);
+
 
 static void
 jse_window_init (JseWindow *window)
 {
-  GdkPixbuf *pixbuf;
-  JuliaPixbuf *jp;
-  GtkImage *image;
-
   gtk_widget_init_template (GTK_WIDGET (window));
 
   window->hashtable = g_hash_table_new_full (g_direct_hash,
@@ -61,39 +61,17 @@ jse_window_init (JseWindow *window)
                                              NULL,
                                              g_object_unref);
 
-  /* TODO: make jv a property of the window */
-  window->jv = julia_view_new (0, 0, 4, 4, 0, CX, CY, MAX_ITERATIONS);
-  jp = julia_pixbuf_new (PIXBUF_WIDTH, PIXBUF_HEIGHT);
-  julia_pixbuf_update_mt(jp, window->jv);
-
-  /* move ownership of jp->pixbuf to GdkPixbuf pixbuf */
-  pixbuf = gdk_pixbuf_new_from_data (jp->pixbuf,
-                                     GDK_COLORSPACE_RGB,
-                                     FALSE,
-                                     8,
-                                     PIXBUF_WIDTH,
-                                     PIXBUF_HEIGHT,
-                                     PIXBUF_WIDTH * 3,
-                                     pixbuf_destroy_notify,
-                                     NULL);
-  jp->pixbuf = NULL;
-  julia_pixbuf_destroy (jp);
-  window->gdk_pixbuf = pixbuf;
-
-  image = GTK_IMAGE (gtk_image_new_from_pixbuf (pixbuf));
-  window->image = image;
-  gtk_widget_set_visible (GTK_WIDGET (image), TRUE);
-  gtk_container_add (GTK_CONTAINER (window->eventbox), GTK_WIDGET (image));
   gtk_widget_add_events (GTK_WIDGET (window->eventbox),
                          GDK_SCROLL_MASK
                          /* TODO: Implement smooth scrolling support */
                          // | GDK_SMOOTH_SCROLL_MASK
                          | GDK_POINTER_MOTION_MASK);
 
-  /* insert pixbuf into hashtable */
-  g_hash_table_insert (window->hashtable,
-                       GINT_TO_POINTER (0),
-                       (gpointer) pixbuf);
+  window->jv = julia_view_new (0, 0, 4, 4, 0, CX, CY, MAX_ITERATIONS);
+  window->pixbuf_width = PIXBUF_WIDTH;
+  window->pixbuf_height = PIXBUF_HEIGHT;
+  /* TODO: make jv a property of the window */
+  jse_window_set_zoom_level (window, 0);
 }
 
 static void
@@ -112,6 +90,7 @@ jse_window_class_init (JseWindowClass *class)
   gtk_widget_class_set_template_from_resource (GTK_WIDGET_CLASS (class),
                                                "/org/gnome/jse/window.ui");
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, eventbox);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, image);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, label_position);
 
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_scroll_event_cb);
@@ -126,26 +105,88 @@ jse_window_new (GtkApplication *app)
                        NULL);
 }
 
+GdkPixbuf *
+get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
+{
+  GHashTable *hashtable = win->hashtable;
+  JuliaView *jv = win->jv;
+  GdkPixbuf *gdk_pixbuf;
+  JuliaPixbuf *jp;
+  gpointer orig_key;
+  gpointer value;
+
+  /* create dummy view used to update the pixbuf with the requested
+     zoom_level */
+  JuliaView jv_tmp;
+  memcpy(&jv_tmp, jv, sizeof (JuliaView));
+  jv_tmp.zoom_level = zoom_level;
+
+  if (g_hash_table_lookup_extended (hashtable,
+                                    GINT_TO_POINTER (zoom_level),
+                                    &orig_key,
+                                    &value))
+    {
+      /* hash table hit */
+
+      gdk_pixbuf = (GdkPixbuf *) value;
+      g_debug ("Cache hit for zoom level %d", zoom_level);
+    }
+  else
+    {
+      /* hash table miss */
+
+      g_debug ("Cache miss for zoom level %d", zoom_level);
+      /* create a new pixbuf for the new zoom value */
+      jp = julia_pixbuf_new (win->pixbuf_width,
+                             win->pixbuf_height);
+      julia_pixbuf_update_mt (jp, &jv_tmp);
+
+      /* transfer ownership of jp->pixbuf to gdk_pixbuf */
+      gdk_pixbuf = gdk_pixbuf_new_from_data (jp->pixbuf,
+                                             GDK_COLORSPACE_RGB,
+                                             FALSE,
+                                             8,
+                                             jp->pix_width,
+                                             jp->pix_height,
+                                             jp->pix_width * 3,
+                                             pixbuf_destroy_notify,
+                                             NULL);
+      free (jp);
+
+      g_hash_table_insert (hashtable,
+                           GINT_TO_POINTER (zoom_level),
+                           (gpointer) gdk_pixbuf);
+    };
+
+  g_debug ("get_pixbuf_for_zoom_level (%p, %d): %p", win, zoom_level, gdk_pixbuf);
+
+  return gdk_pixbuf;
+}
+
+void
+jse_window_set_zoom_level (JseWindow *win, gint zoom_level)
+{
+  g_debug ("zoom level: %d", zoom_level);
+
+  GdkPixbuf *gdk_pixbuf = get_pixbuf_for_zoom_level (win, zoom_level);
+  gtk_image_set_from_pixbuf (win->image, gdk_pixbuf);
+  g_debug ("set pixbuf: %p", gdk_pixbuf);
+  win->jv->zoom_level = zoom_level;
+}
+
 static gboolean
 image_scroll_event_cb (GtkWidget *unused,
                        GdkEventScroll *event,
                        JseWindow *window)
 {
   g_debug ("scroll-event at (%3f, %3f)", event->x, event->y);
-
-  JuliaView *jv = window->jv;
-  GHashTable *hashtable = window->hashtable;
-  GtkImage *image = window->image;
-  GdkPixbuf *gdk_pixbuf;
-  JuliaPixbuf *julia_pixbuf;
-  gpointer orig_key, value;
-  g_debug ("image_scroll_event_cb");
+  gint zoom_level = window->jv->zoom_level;
 
   switch (event->direction)
     {
     case GDK_SCROLL_DOWN:
-      if (jv->zoom_level < MAX_ZOOM_LEVEL)
-        jv->zoom_level++;
+      if (zoom_level < MAX_ZOOM_LEVEL)
+        zoom_level++;
       else
         {
           g_debug ("Reached MAX_ZOOM_LEVEL of %d", MAX_ZOOM_LEVEL);
@@ -153,8 +194,8 @@ image_scroll_event_cb (GtkWidget *unused,
         }
       break;
     case GDK_SCROLL_UP:
-      if (jv->zoom_level > MIN_ZOOM_LEVEL)
-        jv->zoom_level--;
+      if (zoom_level > MIN_ZOOM_LEVEL)
+        zoom_level--;
       else
         {
           g_debug ("Reached MIN_ZOOM_LEVEL of %d", MIN_ZOOM_LEVEL);
@@ -169,48 +210,9 @@ image_scroll_event_cb (GtkWidget *unused,
       return TRUE;
     }
 
-  g_debug ("zoom level: %d", jv->zoom_level);
-
-  if (g_hash_table_lookup_extended (hashtable,
-                                    GINT_TO_POINTER (jv->zoom_level),
-                                    &orig_key,
-                                    &value))
-    {
-      /* hash table hit */
-
-      gdk_pixbuf = (GdkPixbuf *) value;
-      g_debug ("Cache hit for zoom level %d", jv->zoom_level);
-    }
-  else
-    {
-      /* hash table miss */
-
-      g_debug ("Cache miss for zoom level %d", jv->zoom_level);
-      /* create a new pixbuf for the new zoom value */
-      gdk_pixbuf = gtk_image_get_pixbuf (image);
-      julia_pixbuf = julia_pixbuf_new (gdk_pixbuf_get_width (gdk_pixbuf),
-                                       gdk_pixbuf_get_height (gdk_pixbuf));
-      julia_pixbuf_update_mt (julia_pixbuf, jv);
-
-      /* transfer ownership of julia_pixbuf->pixbuf to gdk_pixbuf */
-      gdk_pixbuf = gdk_pixbuf_new_from_data (julia_pixbuf->pixbuf,
-                                             GDK_COLORSPACE_RGB,
-                                             FALSE,
-                                             8,
-                                             julia_pixbuf->pix_width,
-                                             julia_pixbuf->pix_height,
-                                             julia_pixbuf->pix_width * 3,
-                                             pixbuf_destroy_notify,
-                                             NULL);
-      free (julia_pixbuf);
-
-      g_hash_table_insert (hashtable,
-                           GINT_TO_POINTER (jv->zoom_level),
-                           (gpointer) gdk_pixbuf);
-    };
-
-  gtk_image_set_from_pixbuf (image, gdk_pixbuf);
+  jse_window_set_zoom_level (window, zoom_level);
   update_position_label (window, event->x, event->y);
+
   /* stop further handling of event */
   return TRUE;
 }
@@ -240,7 +242,7 @@ image_motion_notify_event_cb (JseWindow *win,
                               GdkEventMotion *event)
 
 {
-  g_debug ("motion-notify event at (%f, %f)", event->x, event->y);
+  // g_debug ("motion-notify event at (%f, %f)", event->x, event->y);
 
   update_position_label (win, event->x, event->y);
 
