@@ -273,7 +273,10 @@ jse_window_set_zoom_level (JseWindow *win,
   GdkPixbuf *gdk_pixbuf = get_pixbuf_for_zoom_level (win, (gint) zoom_level);
   gtk_image_set_from_pixbuf (win->image, gdk_pixbuf);
   g_debug ("set pixbuf: %p", gdk_pixbuf);
+
+  /* FIXME: This is some bad design! */
   win->zoom_level = zoom_level;
+  win->jv->zoom_level = zoom_level;
 
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_ZOOM_LEVEL]);
 }
@@ -336,7 +339,7 @@ update_position_label (JseWindow *win,
 {
   /* TODO: Reduce calculations by saving values somewhere */
   JuliaView *jv = win->jv;
-  int zoom_level = jv->zoom_level;
+  int zoom_level = win->zoom_level;
 
   double width = jv->default_width * pow(ZOOM_FACTOR, zoom_level);
   double height = jv->default_height * pow(ZOOM_FACTOR, zoom_level);
