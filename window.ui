@@ -2,6 +2,11 @@
 <!-- Generated with glade 3.20.3 -->
 <interface>
   <requires lib="gtk+" version="3.20"/>
+  <object class="GtkAdjustment" id="adjustment_zoom">
+    <property name="upper">200</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">5</property>
+  </object>
   <template class="JseWindow" parent="GtkApplicationWindow">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -10,13 +15,13 @@
       <object class="GtkBox">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="margin_bottom">6</property>
         <property name="orientation">vertical</property>
-        <property name="spacing">6</property>
         <child>
           <object class="GtkEventBox" id="eventbox">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
+            <signal name="enter-notify-event" handler="image_enter_notify_event_cb" swapped="yes"/>
+            <signal name="leave-notify-event" handler="image_leave_notify_event_cb" swapped="yes"/>
             <signal name="motion-notify-event" handler="image_motion_notify_event_cb" object="JseWindow" swapped="yes"/>
             <signal name="scroll-event" handler="image_scroll_event_cb" object="JseWindow" swapped="no"/>
             <child>
@@ -40,10 +45,12 @@
             <property name="margin_left">6</property>
             <property name="margin_right">6</property>
             <property name="spacing">9</property>
+            <property name="homogeneous">True</property>
             <child>
               <object class="GtkLabel" id="label_position">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="halign">start</property>
                 <property name="label" translatable="yes">position: </property>
                 <attributes>
                   <attribute name="font-desc" value="Monospace 10"/>
@@ -56,24 +63,20 @@
               </packing>
             </child>
             <child>
-              <object class="GtkLabel" id="label_zoom">
+              <object class="GtkScale" id="scale_zoom">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <attributes>
-                  <attribute name="font-desc" value="Monospace 10"/>
-                </attributes>
+                <property name="can_focus">True</property>
+                <property name="adjustment">adjustment_zoom</property>
+                <property name="restrict_to_fill_level">False</property>
+                <property name="round_digits">0</property>
+                <property name="digits">0</property>
+                <property name="value_pos">left</property>
               </object>
               <packing>
                 <property name="expand">False</property>
                 <property name="fill">True</property>
                 <property name="position">1</property>
               </packing>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
             </child>
           </object>
           <packing>

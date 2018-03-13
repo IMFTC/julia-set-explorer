@@ -11,7 +11,7 @@
 #define PIXBUF_WIDTH  800
 
 #define MAX_ZOOM_LEVEL 200
-#define MIN_ZOOM_LEVEL -20
+#define MIN_ZOOM_LEVEL -10
 #define MAX_ITERATIONS 300
 
 /* TODO: The user should be able to set these! */
@@ -24,6 +24,14 @@
 /* c as in f(z) = z^2 + c */
 #define C_RE -0.7269
 #define C_IM +0.1889
+
+enum {
+  PROP_0,
+  PROP_ZOOM_LEVEL,
+  N_PROPS
+};
+
+static GParamSpec *props[N_PROPS] = {NULL, };
 
 struct _JseWindow
 {
@@ -39,7 +47,11 @@ struct _JseWindow
   JuliaView *jv;
   GHashTable *hashtable;
   GtkWidget *label_position;
-  GtkWidget *label_zoom;
+  GtkAdjustment *adjustment_zoom;
+  GtkScale *scale_zoom;
+
+  double zoom_level;
+  gboolean pointer_in_image;
 };
 
 /* final types don't need private data */
@@ -50,18 +62,23 @@ static gboolean image_scroll_event_cb (GtkWidget *unused,
                                        JseWindow *user_data);
 static gboolean image_motion_notify_event_cb (JseWindow *win,
                                               GdkEventMotion *event);
+static gboolean image_enter_notify_event_cb ();
+static gboolean image_leave_notify_event_cb ();
 static void pixbuf_destroy_notify (guchar *pixels,
                                    gpointer data);
 static void update_position_label (JseWindow *win,
                                    gdouble x,
                                    gdouble y);
 void jse_window_set_zoom_level (JseWindow *win,
-                                gint zoom_level);
+                                gdouble zoom_level);
+gint jse_window_get_zoom_level (JseWindow *win);
 
 
 static void
 jse_window_init (JseWindow *window)
 {
+  GtkAdjustment *adjustment_zoom;
+
   gtk_widget_init_template (GTK_WIDGET (window));
 
   window->hashtable = g_hash_table_new_full (g_direct_hash,
@@ -73,7 +90,9 @@ jse_window_init (JseWindow *window)
                          GDK_SCROLL_MASK
                          /* TODO: Implement smooth scrolling support */
                          // | GDK_SMOOTH_SCROLL_MASK
-                         | GDK_POINTER_MOTION_MASK);
+                         | GDK_POINTER_MOTION_MASK
+                         | GDK_ENTER_NOTIFY_MASK
+                         | GDK_LEAVE_NOTIFY_MASK);
 
   window->jv = julia_view_new (VIEW_CENTER_RE, VIEW_CENTER_IM,
                                VIEW_WIDTH, VIEW_HEIGHT, 0,
@@ -81,8 +100,20 @@ jse_window_init (JseWindow *window)
 
   window->pixbuf_width = PIXBUF_WIDTH;
   window->pixbuf_height = PIXBUF_HEIGHT;
-  /* TODO: make jv a property of the window */
+
   jse_window_set_zoom_level (window, 0);
+
+  adjustment_zoom = window->adjustment_zoom;
+  gtk_adjustment_set_lower (adjustment_zoom, MIN_ZOOM_LEVEL);
+  gtk_adjustment_set_upper (adjustment_zoom, MAX_ZOOM_LEVEL);
+
+  /* bind the zoom slider value to the zoom level of the image */
+  g_object_bind_property (window, "zoom-level",
+                          window->adjustment_zoom, "value",
+                          G_BINDING_BIDIRECTIONAL
+                          | G_BINDING_SYNC_CREATE);
+
+  window->pointer_in_image = FALSE;
 }
 
 static void
@@ -99,17 +130,72 @@ jse_window_finalize (GObject *object)
 }
 
 static void
+jse_window_set_property (GObject *object,
+                         guint property_id,
+                         const GValue *value,
+                         GParamSpec *pspec)
+{
+  JseWindow *win = JSE_WINDOW (object);
+
+  switch (property_id)
+    {
+    case PROP_ZOOM_LEVEL:
+      jse_window_set_zoom_level (win, g_value_get_double (value));
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+    }
+}
+
+static void
+jse_window_get_property (GObject *object,
+                         guint property_id,
+                         GValue *value,
+                         GParamSpec *pspec)
+{
+  JseWindow *win = JSE_WINDOW (object);
+
+  switch (property_id)
+    {
+    case PROP_ZOOM_LEVEL:
+      g_value_set_double (value, jse_window_get_zoom_level (win));
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+    }
+}
+
+static void
 jse_window_class_init (JseWindowClass *class)
 {
-  G_OBJECT_CLASS (class)->finalize = jse_window_finalize;
+  GObjectClass *gobject_class = G_OBJECT_CLASS (class);
+
+  gobject_class->finalize = jse_window_finalize;
+  gobject_class->set_property = jse_window_set_property;
+  gobject_class->get_property = jse_window_get_property;
+
   gtk_widget_class_set_template_from_resource (GTK_WIDGET_CLASS (class),
                                                "/org/gnome/jse/window.ui");
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, eventbox);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, image);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, label_position);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_zoom);
 
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_scroll_event_cb);
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_motion_notify_event_cb);
+  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_enter_notify_event_cb);
+  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_leave_notify_event_cb);
+
+  props[PROP_ZOOM_LEVEL] =
+    g_param_spec_double ("zoom-level", "Zoom level", "Zoom level",
+                         MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL, 0,
+                         G_PARAM_READWRITE);
+
+  g_object_class_install_properties (gobject_class,
+                                     N_PROPS,
+                                     props);
 }
 
 JseWindow *
@@ -179,23 +265,33 @@ get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
 }
 
 void
-jse_window_set_zoom_level (JseWindow *win, gint zoom_level)
+jse_window_set_zoom_level (JseWindow *win,
+                           gdouble zoom_level)
 {
-  g_debug ("zoom level: %d", zoom_level);
+  g_debug ("zoom level: %f", zoom_level);
 
-  GdkPixbuf *gdk_pixbuf = get_pixbuf_for_zoom_level (win, zoom_level);
+  GdkPixbuf *gdk_pixbuf = get_pixbuf_for_zoom_level (win, (gint) zoom_level);
   gtk_image_set_from_pixbuf (win->image, gdk_pixbuf);
   g_debug ("set pixbuf: %p", gdk_pixbuf);
-  win->jv->zoom_level = zoom_level;
+  win->zoom_level = zoom_level;
+
+  g_object_notify_by_pspec (G_OBJECT (win), props[PROP_ZOOM_LEVEL]);
+}
+
+
+gint
+jse_window_get_zoom_level (JseWindow *win)
+{
+  return win->zoom_level;
 }
 
 static gboolean
 image_scroll_event_cb (GtkWidget *unused,
                        GdkEventScroll *event,
-                       JseWindow *window)
+                       JseWindow *win)
 {
   g_debug ("scroll-event at (%3f, %3f)", event->x, event->y);
-  gint zoom_level = window->jv->zoom_level;
+  gint zoom_level = win->zoom_level;
 
   switch (event->direction)
     {
@@ -225,15 +321,18 @@ image_scroll_event_cb (GtkWidget *unused,
       return TRUE;
     }
 
-  jse_window_set_zoom_level (window, zoom_level);
-  update_position_label (window, event->x, event->y);
+  jse_window_set_zoom_level (win, zoom_level);
+
+  update_position_label (win, event->x, event->y);
 
   /* stop further handling of event */
   return TRUE;
 }
 
 static void
-update_position_label (JseWindow *win, gdouble x, gdouble y)
+update_position_label (JseWindow *win,
+                       gdouble x,
+                       gdouble y)
 {
   /* TODO: Reduce calculations by saving values somewhere */
   JuliaView *jv = win->jv;
@@ -246,8 +345,11 @@ update_position_label (JseWindow *win, gdouble x, gdouble y)
   double pos_im = jv->center_im + height * (0.5 - y / PIXBUF_HEIGHT);
 
   GString *text = g_string_new (NULL);
+  if (win->pointer_in_image)
+    g_string_printf (text, "pos: %+.15f %+1.15fi", pos_re, pos_im);
+  else
+    g_string_printf (text, "pos: (pointer outside of image)");
 
-  g_string_printf (text, "pos: %+.15f %+1.15fi", pos_re, pos_im);
   gtk_label_set_text (GTK_LABEL (win->label_position), text->str);
   g_string_free (text, TRUE);
 }
@@ -260,6 +362,23 @@ image_motion_notify_event_cb (JseWindow *win,
   // g_debug ("motion-notify event at (%f, %f)", event->x, event->y);
 
   update_position_label (win, event->x, event->y);
+
+  return TRUE;
+}
+
+static gboolean
+image_enter_notify_event_cb (JseWindow *win)
+{
+  win->pointer_in_image = TRUE;
+
+  return TRUE;
+}
+
+static gboolean
+image_leave_notify_event_cb (JseWindow *win)
+{
+  win->pointer_in_image = FALSE;
+  update_position_label (win, 0, 0);
 
   return TRUE;
 }
