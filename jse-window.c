@@ -57,21 +57,18 @@ struct _JseWindow
 /* final types don't need private data */
 G_DEFINE_TYPE (JseWindow, jse_window, GTK_TYPE_APPLICATION_WINDOW);
 
-static gboolean image_scroll_event_cb (GtkWidget *unused,
-                                       GdkEventScroll *event,
-                                       JseWindow *user_data);
-static gboolean image_motion_notify_event_cb (JseWindow *win,
-                                              GdkEventMotion *event);
-static gboolean image_enter_notify_event_cb ();
-static gboolean image_leave_notify_event_cb ();
 static void pixbuf_destroy_notify (guchar *pixels,
                                    gpointer data);
 static void update_position_label (JseWindow *win,
                                    gdouble x,
                                    gdouble y);
-void jse_window_set_zoom_level (JseWindow *win,
-                                gdouble zoom_level);
-gint jse_window_get_zoom_level (JseWindow *win);
+static gboolean image_scroll_event_cb (GtkWidget *unused,
+                                       GdkEventScroll *event,
+                                       JseWindow *user_data);
+static gboolean image_motion_notify_event_cb (JseWindow *win,
+                                              GdkEventMotion *event);
+static gboolean image_enter_notify_event_cb (JseWindow *win);
+static gboolean image_leave_notify_event_cb (JseWindow *win);
 
 
 static void
@@ -282,7 +279,7 @@ jse_window_set_zoom_level (JseWindow *win,
 }
 
 
-gint
+double
 jse_window_get_zoom_level (JseWindow *win)
 {
   return win->zoom_level;
