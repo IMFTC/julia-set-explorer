@@ -86,23 +86,22 @@ jse_window_init (JseWindow *window)
 }
 
 static void
-jse_window_dispose (GObject *object)
+jse_window_finalize (GObject *object)
 {
   JseWindow *window = JSE_WINDOW (object);
 
-  g_debug ("jse_window_dispose (%p)", object);
+  g_debug ("jse_window_finalize (%p)", object);
 
-  /* this function may be called multiple times, guard against that */
-  g_clear_pointer (&window->jv, julia_view_destroy);
-  g_clear_pointer (&window->hashtable, g_hash_table_destroy);
+  julia_view_destroy (window->jv);
+  g_hash_table_destroy (window->hashtable);
 
-  G_OBJECT_CLASS (jse_window_parent_class)->dispose (object);
+  G_OBJECT_CLASS (jse_window_parent_class)->finalize (object);
 }
 
 static void
 jse_window_class_init (JseWindowClass *class)
 {
-  G_OBJECT_CLASS (class)->dispose = jse_window_dispose;
+  G_OBJECT_CLASS (class)->finalize = jse_window_finalize;
   gtk_widget_class_set_template_from_resource (GTK_WIDGET_CLASS (class),
                                                "/org/gnome/jse/window.ui");
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, eventbox);
