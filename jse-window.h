@@ -9,10 +9,14 @@
 G_DECLARE_FINAL_TYPE (JseWindow, jse_window, JSE, WINDOW, GtkApplicationWindow)
 
 JseWindow *jse_window_new (GtkApplication *app);
-void jse_window_set_image (struct _JseWindow *win,
-                           GtkImage *img);
 void jse_window_set_zoom_level (JseWindow *win,
                                 gdouble zoom_level);
 gdouble jse_window_get_zoom_level (JseWindow *win);
+void jse_window_set_cre (JseWindow *win,
+                         double cre);
+double jse_window_get_cre (JseWindow *win);
+void jse_window_set_cim (JseWindow *win,
+                         double cim);
+double jse_window_get_cim (JseWindow *win);
 
 #endif /* __JSE_WINDOW_H__ */

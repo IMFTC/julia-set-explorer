@@ -27,6 +27,8 @@
 
 enum {
   PROP_0,
+  PROP_CRE,
+  PROP_CIM,
   PROP_ZOOM_LEVEL,
   N_PROPS
 };
@@ -37,14 +39,26 @@ struct _JseWindow
 {
   GtkApplicationWindow parent;
 
-  GtkWidget *eventbox;
-  GtkImage *image;
+  /* dimensions at zoom level 0 */
+  gdouble view_width;
+  gdouble view_height;
+
+  /* TODO allow center to differ from (0, 0) */
+  gdouble view_center_re;
+  gdouble view_center_im;
+
+  /* c in: f(z) = z^2 + c */
+  double cre;
+  double cim;
 
   /* GdkPixbuf *gdk_pixbuf; */
   gint pixbuf_width;
   gint pixbuf_height;
 
-  JuliaView *jv;
+  /* UI parts */
+  GtkWidget *eventbox;
+  GtkImage *image;
+
   GHashTable *hashtable;
   GtkWidget *label_position;
   GtkAdjustment *adjustment_zoom;
@@ -76,6 +90,18 @@ jse_window_init (JseWindow *window)
 {
   GtkAdjustment *adjustment_zoom;
 
+  window->view_center_re = VIEW_CENTER_RE;
+  window->view_center_im = VIEW_CENTER_IM;
+
+  window->view_width = VIEW_WIDTH;
+  window->view_height = VIEW_HEIGHT;
+
+  window->pixbuf_width = PIXBUF_WIDTH;
+  window->pixbuf_height = PIXBUF_HEIGHT;
+
+  window->cre = C_RE;
+  window->cim = C_IM;
+
   gtk_widget_init_template (GTK_WIDGET (window));
 
   window->hashtable = g_hash_table_new_full (g_direct_hash,
@@ -90,13 +116,6 @@ jse_window_init (JseWindow *window)
                          | GDK_POINTER_MOTION_MASK
                          | GDK_ENTER_NOTIFY_MASK
                          | GDK_LEAVE_NOTIFY_MASK);
-
-  window->jv = julia_view_new (VIEW_CENTER_RE, VIEW_CENTER_IM,
-                               VIEW_WIDTH, VIEW_HEIGHT, 0,
-                               C_RE, C_IM, MAX_ITERATIONS);
-
-  window->pixbuf_width = PIXBUF_WIDTH;
-  window->pixbuf_height = PIXBUF_HEIGHT;
 
   jse_window_set_zoom_level (window, 0);
 
@@ -120,7 +139,6 @@ jse_window_finalize (GObject *object)
 
   g_debug ("jse_window_finalize (%p)", object);
 
-  julia_view_destroy (window->jv);
   g_hash_table_destroy (window->hashtable);
 
   G_OBJECT_CLASS (jse_window_parent_class)->finalize (object);
@@ -138,6 +156,12 @@ jse_window_set_property (GObject *object,
     {
     case PROP_ZOOM_LEVEL:
       jse_window_set_zoom_level (win, g_value_get_double (value));
+      break;
+    case PROP_CRE:
+      jse_window_set_cre (win, g_value_get_double (value));
+      break;
+    case PROP_CIM:
+      jse_window_set_cim (win, g_value_get_double (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -157,6 +181,12 @@ jse_window_get_property (GObject *object,
     {
     case PROP_ZOOM_LEVEL:
       g_value_set_double (value, jse_window_get_zoom_level (win));
+      break;
+    case PROP_CRE:
+      g_value_set_double (value, jse_window_get_cre (win));
+      break;
+    case PROP_CIM:
+      g_value_set_double (value, jse_window_get_cim (win));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -189,6 +219,14 @@ jse_window_class_init (JseWindowClass *class)
     g_param_spec_double ("zoom-level", "Zoom level", "Zoom level",
                          MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL, 0,
                          G_PARAM_READWRITE);
+  props[PROP_CRE] =
+    g_param_spec_double ("cre", "c_re", "real part of c",
+                         -1.d, 1.d, 0.d,
+                         G_PARAM_READWRITE);
+  props[PROP_CIM] =
+    g_param_spec_double ("cim", "c_im", "im part of c",
+                         -1.d, 1.d, 0.d,
+                         G_PARAM_READWRITE);
 
   g_object_class_install_properties (gobject_class,
                                      N_PROPS,
@@ -207,17 +245,10 @@ GdkPixbuf *
 get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
 {
   GHashTable *hashtable = win->hashtable;
-  JuliaView *jv = win->jv;
   GdkPixbuf *gdk_pixbuf;
   JuliaPixbuf *jp;
   gpointer orig_key;
   gpointer value;
-
-  /* create dummy view used to update the pixbuf with the requested
-     zoom_level */
-  JuliaView jv_tmp;
-  memcpy(&jv_tmp, jv, sizeof (JuliaView));
-  jv_tmp.zoom_level = zoom_level;
 
   if (g_hash_table_lookup_extended (hashtable,
                                     GINT_TO_POINTER (zoom_level),
@@ -237,6 +268,14 @@ get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
       /* create a new pixbuf for the new zoom value */
       jp = julia_pixbuf_new (win->pixbuf_width,
                              win->pixbuf_height);
+      JuliaView jv_tmp = {win->view_center_re,
+                          win->view_center_im,
+                          win->view_width,
+                          win->view_height,
+                          zoom_level,
+                          win->cre,
+                          win->cim,
+                          MAX_ITERATIONS};
       julia_pixbuf_update_mt (jp, &jv_tmp);
 
       /* transfer ownership of jp->pixbuf to gdk_pixbuf */
@@ -273,7 +312,6 @@ jse_window_set_zoom_level (JseWindow *win,
 
   /* FIXME: This is some bad design! */
   win->zoom_level = zoom_level;
-  win->jv->zoom_level = zoom_level;
 
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_ZOOM_LEVEL]);
 }
@@ -283,6 +321,34 @@ double
 jse_window_get_zoom_level (JseWindow *win)
 {
   return win->zoom_level;
+}
+
+void
+jse_window_set_cre (JseWindow *win, double cre)
+{
+  win->cre = cre;
+
+  g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CRE]);
+}
+
+double
+jse_window_get_cre (JseWindow *win)
+{
+  return win->cre;
+}
+
+void
+jse_window_set_cim (JseWindow *win, double cim)
+{
+  win->cim = cim;
+
+  g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CIM]);
+}
+
+double
+jse_window_get_cim (JseWindow *win)
+{
+  return win->cim;
 }
 
 static gboolean
@@ -335,14 +401,13 @@ update_position_label (JseWindow *win,
                        gdouble y)
 {
   /* TODO: Reduce calculations by saving values somewhere */
-  JuliaView *jv = win->jv;
   int zoom_level = win->zoom_level;
 
-  double width = jv->default_width * pow(ZOOM_FACTOR, zoom_level);
-  double height = jv->default_height * pow(ZOOM_FACTOR, zoom_level);
+  double width = win->view_width * pow(ZOOM_FACTOR, zoom_level);
+  double height = win->view_height * pow(ZOOM_FACTOR, zoom_level);
 
-  double pos_re = jv->center_re + width * (x / PIXBUF_WIDTH - 0.5);
-  double pos_im = jv->center_im + height * (0.5 - y / PIXBUF_HEIGHT);
+  double pos_re = win->view_center_re + width * (x / win->pixbuf_width - 0.5);
+  double pos_im = win->view_center_im + height * (0.5 - y / win->pixbuf_height);
 
   GString *text = g_string_new (NULL);
   if (win->pointer_in_image)
