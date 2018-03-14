@@ -10,8 +10,8 @@ typedef struct _JuliaView JuliaView;
 struct _JuliaView
 {
   /* center of the view to be drawn */
-  double center_re;
-  double center_im;
+  double centerx;               /* Re(center) */
+  double centery;               /* Im(center) */
 
   /* dimensions of the view in the complex plane (not pixels in
      image!) at zoom level 0 */
@@ -23,8 +23,8 @@ struct _JuliaView
   /* Complex number c used in
    * z_(n+1) = (z_n)^2 + c
    */
-  double c_re;
-  double c_im;
+  double cx;                    /* Re(c) */
+  double cy;                    /* Im(c) */
 
   int max_iterations;
 
@@ -56,13 +56,13 @@ void julia_pixbuf_update (JuliaPixbuf *pixbuf,
 
 void julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view);
 
-JuliaView *julia_view_new (double center_re,
-                           double center_im,
+JuliaView *julia_view_new (double centerx,
+                           double centery,
                            double default_width,
                            double default_height,
                            int zoom_level,
-                           double c_re,
-                           double c_im,
+                           double cx,
+                           double cy,
                            int max_iterations);
 void julia_view_destroy (JuliaView *jv);
 

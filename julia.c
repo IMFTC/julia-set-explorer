@@ -74,10 +74,10 @@ julia_pixbuf_update_partial (void *data)
   int pix_width = pixbuf->pix_width;
   int pixbuf_size = pixbuf->size;
 
-  double center_re = view->center_re;
-  double center_im = view->center_im;
-  double c_re = view->c_re;
-  double c_im = view->c_im;
+  double centerx = view->centerx;
+  double centery = view->centery;
+  double cx = view->cx;
+  double cy = view->cy;
   int zoom_level = view->zoom_level;
   int max_iterations = view->max_iterations;
 
@@ -87,7 +87,7 @@ julia_pixbuf_update_partial (void *data)
   double height = view->default_height * pow(ZOOM_FACTOR, zoom_level);
 
   int iteration, position;
-  double a_re, a_im, a_2, b_2, _2ab;
+  double zx_tmp, zx, zy, zx_2, zy_2;
   double color_scale = 255. / max_iterations;
   char max_iter_color[3] = {0};
   unsigned char *first_pixel, *last_pixel, *mirrored_pixel;
@@ -102,25 +102,24 @@ julia_pixbuf_update_partial (void *data)
   /* Update every pixel taking advantage of the symmetry by filling
    * the left and right half at once. */
   for (int x = thread; x < pix_width / 2; x += n_threads) {
-
+    zx_tmp = centerx + width * ((double) x / (double) pix_width - 0.5);
     for (int y = 0; y < pix_height; y++) {
       /* Get the re and im parts for the complex number corresponding
        * to the current pixel. */
-      a_re = center_re + width * ((double) x / (double) pix_width - 0.5);
-      a_im = center_im + height * (0.5 - (double) y / (double) pix_height);
+      zx = zx_tmp;
+      zy = centery + height * (0.5 - (double) y / (double) pix_height);
 
       iteration = 0;
       while (iteration < max_iterations) {
-        a_2 = a_re * a_re;      /* = a^2 */
-        b_2 = a_im * a_im;      /* = b^2 */
+        zx_2 = zx * zx;      /* Re(z)^2 */
+        zy_2 = zy * zy;      /* Im(z)^2 */
 
         /* Leave loop if |z_n| > 2 */
-        if (a_2 + b_2 > 4.)
+        if (zx_2 + zy_2 > 4.)
           break;
 
-        _2ab = 2.0 * a_re * a_im;
-        a_re = a_2 - b_2 + c_re;
-        a_im = _2ab + c_im;
+        zy = 2.0 * zx * zy + cy;
+        zx = zx_2 - zy_2 + cx;
 
         iteration++;
       }
@@ -129,6 +128,7 @@ julia_pixbuf_update_partial (void *data)
       pixel = first_pixel + position;
       mirrored_pixel = last_pixel - position;
 
+      /* TODO: Use a proper colormap */
       if (iteration == max_iterations) {
         memcpy(pixel, max_iter_color, 3);
         memcpy(mirrored_pixel, max_iter_color, 3);
@@ -190,13 +190,13 @@ julia_pixbuf_update (JuliaPixbuf *pixbuf,
 }
 
 JuliaView *
-julia_view_new (double center_re,
-                double center_im,
+julia_view_new (double centerx,
+                double centery,
                 double default_width,
                 double default_height,
                 int zoom_level,
-                double c_re,
-                double c_im,
+                double cx,
+                double cy,
                 int max_iterations)
 {
   JuliaView *jv = calloc (1, sizeof (JuliaView));
@@ -207,13 +207,13 @@ julia_view_new (double center_re,
       exit (EXIT_FAILURE);
     }
 
-  jv->center_re = center_re;
-  jv->center_im = center_im;
+  jv->centerx = centerx;
+  jv->centery = centery;
   jv->default_width = default_width;
   jv->default_height = default_height;
   jv->zoom_level = zoom_level;
-  jv->c_re = c_re;
-  jv->c_im = c_im;
+  jv->cx = cx;
+  jv->cy = cy;
   jv->max_iterations = max_iterations;
 
   return jv;
