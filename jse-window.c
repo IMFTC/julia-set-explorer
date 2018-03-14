@@ -12,7 +12,7 @@
 
 #define MAX_ZOOM_LEVEL 200
 #define MIN_ZOOM_LEVEL -10
-#define MAX_ITERATIONS 300
+#define MAX_ITERATIONS 200
 
 /* TODO: The user should be able to set these! */
 /* The view of the complex plane to be displayed by the window */
@@ -22,8 +22,8 @@
 #define VIEW_CENTER_RE 0
 #define VIEW_CENTER_IM 0
 /* c as in f(z) = z^2 + c */
-#define C_RE -0.7269
-#define C_IM +0.1889
+#define C_RE -0.4
+#define C_IM +0.6
 
 enum {
   PROP_0,
@@ -59,9 +59,16 @@ struct _JseWindow
   GtkWidget *eventbox;
   GtkImage *image;
 
+  /* TODO: Use GActions */
+  GtkToggleButton *button_c;
+  GtkLabel *button_c_label;
+  GtkPopover *button_c_popover;
+
   GHashTable *hashtable;
   GtkWidget *label_position;
   GtkAdjustment *adjustment_zoom;
+  GtkAdjustment *adjustment_cre;
+  GtkAdjustment *adjustment_cim;
   GtkScale *scale_zoom;
 
   double zoom_level;
@@ -83,7 +90,7 @@ static gboolean image_motion_notify_event_cb (JseWindow *win,
                                               GdkEventMotion *event);
 static gboolean image_enter_notify_event_cb (JseWindow *win);
 static gboolean image_leave_notify_event_cb (JseWindow *win);
-
+static void update_button_c_label (JseWindow *win);
 
 static void
 jse_window_init (JseWindow *window)
@@ -123,13 +130,30 @@ jse_window_init (JseWindow *window)
   gtk_adjustment_set_lower (adjustment_zoom, MIN_ZOOM_LEVEL);
   gtk_adjustment_set_upper (adjustment_zoom, MAX_ZOOM_LEVEL);
 
+  /* TODO: Use GActions? */
+  g_object_bind_property (window->button_c, "active",
+                          window->button_c_popover, "visible",
+                          G_BINDING_BIDIRECTIONAL
+                          | G_BINDING_SYNC_CREATE);
+
   /* bind the zoom slider value to the zoom level of the image */
   g_object_bind_property (window, "zoom-level",
                           window->adjustment_zoom, "value",
                           G_BINDING_BIDIRECTIONAL
                           | G_BINDING_SYNC_CREATE);
 
+  g_object_bind_property (window, "cre",
+                          window->adjustment_cre, "value",
+                          G_BINDING_BIDIRECTIONAL
+                          | G_BINDING_SYNC_CREATE);
+
+  g_object_bind_property (window, "cim",
+                          window->adjustment_cim, "value",
+                          G_BINDING_BIDIRECTIONAL
+                          | G_BINDING_SYNC_CREATE);
+
   window->pointer_in_image = FALSE;
+  update_button_c_label (window);
 }
 
 static void
@@ -209,6 +233,11 @@ jse_window_class_init (JseWindowClass *class)
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, image);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, label_position);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_zoom);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, button_c);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, button_c_label);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, button_c_popover);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_cre);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_cim);
 
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_scroll_event_cb);
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_motion_notify_event_cb);
@@ -341,6 +370,8 @@ jse_window_set_cre (JseWindow *win, double cre)
   g_hash_table_remove_all (win->hashtable);
   update_image (win);
 
+  update_button_c_label (win);
+
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CRE]);
 }
 
@@ -361,6 +392,8 @@ jse_window_set_cim (JseWindow *win, double cim)
   /* don't blow up the memory! */
   g_hash_table_remove_all (win->hashtable);
   update_image (win);
+
+  update_button_c_label (win);
 
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CIM]);
 }
@@ -413,6 +446,15 @@ image_scroll_event_cb (GtkWidget *unused,
 
   /* stop further handling of event */
   return TRUE;
+}
+
+static void
+update_button_c_label (JseWindow *win)
+{
+  GString *text = g_string_new (NULL);
+  g_string_printf (text, "c = %+.3f %+1.3fi", win->cre, win->cim);
+  gtk_label_set_text (win->button_c_label, text->str);
+  g_string_free (text, TRUE);
 }
 
 static void
