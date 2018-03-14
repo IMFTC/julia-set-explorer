@@ -51,19 +51,23 @@ julia_pixbuf_new (int pix_height,
 void
 julia_pixbuf_destroy (JuliaPixbuf *jsp);
 
-void julia_pixbuf_update (JuliaPixbuf *pixbuf,
-                          JuliaView *view);
+void
+julia_pixbuf_update (JuliaPixbuf *pixbuf,
+                     JuliaView *view);
 
-void julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view);
+void
+julia_pixbuf_update_mt (JuliaPixbuf *pixbuf, JuliaView *view);
 
-JuliaView *julia_view_new (double centerx,
-                           double centery,
-                           double default_width,
-                           double default_height,
-                           int zoom_level,
-                           double cx,
-                           double cy,
-                           int max_iterations);
-void julia_view_destroy (JuliaView *jv);
+JuliaView *
+julia_view_new (double centerx,
+                double centery,
+                double default_width,
+                double default_height,
+                int zoom_level,
+                double cx,
+                double cy,
+                int max_iterations);
+void
+julia_view_destroy (JuliaView *jv);
 
 #endif /* JULIA_H */
