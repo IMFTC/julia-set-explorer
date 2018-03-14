@@ -82,6 +82,7 @@
                 <property name="restrict_to_fill_level">False</property>
                 <property name="round_digits">0</property>
                 <property name="digits">0</property>
+                <property name="has_origin">False</property>
                 <property name="value_pos">left</property>
               </object>
               <packing>
