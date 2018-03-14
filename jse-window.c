@@ -301,17 +301,23 @@ get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
 }
 
 void
+update_image (JseWindow *win)
+{
+  GdkPixbuf *gdk_pixbuf = get_pixbuf_for_zoom_level (win, win->zoom_level);
+
+  gtk_image_set_from_pixbuf (win->image, gdk_pixbuf);
+  g_debug ("update_image: using GdkPixbuf %p", gdk_pixbuf);
+}
+
+
+void
 jse_window_set_zoom_level (JseWindow *win,
                            gdouble zoom_level)
 {
   g_debug ("zoom level: %f", zoom_level);
 
-  GdkPixbuf *gdk_pixbuf = get_pixbuf_for_zoom_level (win, (gint) zoom_level);
-  gtk_image_set_from_pixbuf (win->image, gdk_pixbuf);
-  g_debug ("set pixbuf: %p", gdk_pixbuf);
-
-  /* FIXME: This is some bad design! */
   win->zoom_level = zoom_level;
+  update_image (win);
 
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_ZOOM_LEVEL]);
 }
@@ -326,7 +332,14 @@ jse_window_get_zoom_level (JseWindow *win)
 void
 jse_window_set_cre (JseWindow *win, double cre)
 {
+  if (cre == win->cre)
+    return;
+
   win->cre = cre;
+
+  /* don't blow up the memory! */
+  g_hash_table_remove_all (win->hashtable);
+  update_image (win);
 
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CRE]);
 }
@@ -340,7 +353,14 @@ jse_window_get_cre (JseWindow *win)
 void
 jse_window_set_cim (JseWindow *win, double cim)
 {
+  if (cim == win->cim)
+    return;
+
   win->cim = cim;
+
+  /* don't blow up the memory! */
+  g_hash_table_remove_all (win->hashtable);
+  update_image (win);
 
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CIM]);
 }
