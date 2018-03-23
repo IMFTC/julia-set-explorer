@@ -12,7 +12,10 @@
 
 #define MAX_ZOOM_LEVEL 200
 #define MIN_ZOOM_LEVEL -10
-#define MAX_ITERATIONS 200
+
+#define MAX_ITERATIONS 5000
+#define MIN_ITERATIONS 0
+#define ITERATIONS 200
 
 /* TODO: The user should be able to set these! */
 /* The view of the complex plane to be displayed by the window */
@@ -29,6 +32,7 @@ enum {
   PROP_0,
   PROP_CRE,
   PROP_CIM,
+  PROP_ITERATIONS,
   PROP_ZOOM_LEVEL,
   N_PROPS
 };
@@ -51,6 +55,8 @@ struct _JseWindow
   double cre;
   double cim;
 
+  guint iterations;
+
   /* GdkPixbuf *gdk_pixbuf; */
   gint pixbuf_width;
   gint pixbuf_height;
@@ -66,9 +72,10 @@ struct _JseWindow
 
   GHashTable *hashtable;
   GtkWidget *label_position;
-  GtkAdjustment *adjustment_zoom;
   GtkAdjustment *adjustment_cre;
   GtkAdjustment *adjustment_cim;
+  GtkAdjustment *adjustment_iterations;
+  GtkAdjustment *adjustment_zoom;
   GtkScale *scale_zoom;
 
   double zoom_level;
@@ -95,8 +102,6 @@ static void update_button_c_label (JseWindow *win);
 static void
 jse_window_init (JseWindow *window)
 {
-  GtkAdjustment *adjustment_zoom;
-
   window->view_center_re = VIEW_CENTER_RE;
   window->view_center_im = VIEW_CENTER_IM;
 
@@ -108,6 +113,8 @@ jse_window_init (JseWindow *window)
 
   window->cre = C_RE;
   window->cim = C_IM;
+
+  window->iterations = ITERATIONS;
 
   gtk_widget_init_template (GTK_WIDGET (window));
 
@@ -126,21 +133,11 @@ jse_window_init (JseWindow *window)
 
   jse_window_set_zoom_level (window, 0);
 
-  adjustment_zoom = window->adjustment_zoom;
-  gtk_adjustment_set_lower (adjustment_zoom, MIN_ZOOM_LEVEL);
-  gtk_adjustment_set_upper (adjustment_zoom, MAX_ZOOM_LEVEL);
+  gtk_adjustment_set_lower (window->adjustment_zoom, MIN_ZOOM_LEVEL);
+  gtk_adjustment_set_upper (window->adjustment_zoom, MAX_ZOOM_LEVEL);
 
-  /* TODO: Use GActions? */
-  g_object_bind_property (window->button_c, "active",
-                          window->button_c_popover, "visible",
-                          G_BINDING_BIDIRECTIONAL
-                          | G_BINDING_SYNC_CREATE);
-
-  /* bind the zoom slider value to the zoom level of the image */
-  g_object_bind_property (window, "zoom-level",
-                          window->adjustment_zoom, "value",
-                          G_BINDING_BIDIRECTIONAL
-                          | G_BINDING_SYNC_CREATE);
+  gtk_adjustment_set_lower (window->adjustment_iterations, MIN_ITERATIONS);
+  gtk_adjustment_set_upper (window->adjustment_iterations, MAX_ITERATIONS);
 
   g_object_bind_property (window, "cre",
                           window->adjustment_cre, "value",
@@ -149,6 +146,22 @@ jse_window_init (JseWindow *window)
 
   g_object_bind_property (window, "cim",
                           window->adjustment_cim, "value",
+                          G_BINDING_BIDIRECTIONAL
+                          | G_BINDING_SYNC_CREATE);
+
+  g_object_bind_property (window, "iterations",
+                          window->adjustment_iterations, "value",
+                          G_BINDING_BIDIRECTIONAL
+                          | G_BINDING_SYNC_CREATE);
+
+  g_object_bind_property (window, "zoom-level",
+                          window->adjustment_zoom, "value",
+                          G_BINDING_BIDIRECTIONAL
+                          | G_BINDING_SYNC_CREATE);
+
+  /* TODO: Use GActions? */
+  g_object_bind_property (window->button_c, "active",
+                          window->button_c_popover, "visible",
                           G_BINDING_BIDIRECTIONAL
                           | G_BINDING_SYNC_CREATE);
 
@@ -178,14 +191,17 @@ jse_window_set_property (GObject *object,
 
   switch (property_id)
     {
-    case PROP_ZOOM_LEVEL:
-      jse_window_set_zoom_level (win, g_value_get_double (value));
-      break;
     case PROP_CRE:
       jse_window_set_cre (win, g_value_get_double (value));
       break;
     case PROP_CIM:
       jse_window_set_cim (win, g_value_get_double (value));
+      break;
+    case PROP_ITERATIONS:
+      jse_window_set_iterations (win, g_value_get_uint (value));
+      break;
+    case PROP_ZOOM_LEVEL:
+      jse_window_set_zoom_level (win, g_value_get_double (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -203,14 +219,17 @@ jse_window_get_property (GObject *object,
 
   switch (property_id)
     {
-    case PROP_ZOOM_LEVEL:
-      g_value_set_double (value, jse_window_get_zoom_level (win));
-      break;
     case PROP_CRE:
       g_value_set_double (value, jse_window_get_cre (win));
       break;
     case PROP_CIM:
       g_value_set_double (value, jse_window_get_cim (win));
+      break;
+    case PROP_ITERATIONS:
+      g_value_set_uint (value, jse_window_get_iterations (win));
+      break;
+    case PROP_ZOOM_LEVEL:
+      g_value_set_double (value, jse_window_get_zoom_level (win));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -238,16 +257,13 @@ jse_window_class_init (JseWindowClass *class)
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, button_c_popover);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_cre);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_cim);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_iterations);
 
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_scroll_event_cb);
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_motion_notify_event_cb);
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_enter_notify_event_cb);
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_leave_notify_event_cb);
 
-  props[PROP_ZOOM_LEVEL] =
-    g_param_spec_double ("zoom-level", "Zoom level", "Zoom level",
-                         MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL, 0,
-                         G_PARAM_READWRITE);
   props[PROP_CRE] =
     g_param_spec_double ("cre", "c_re", "real part of c",
                          -1.d, 1.d, 0.d,
@@ -256,6 +272,17 @@ jse_window_class_init (JseWindowClass *class)
     g_param_spec_double ("cim", "c_im", "im part of c",
                          -1.d, 1.d, 0.d,
                          G_PARAM_READWRITE);
+
+  props[PROP_ITERATIONS] =
+    g_param_spec_uint ("iterations", "iterations", "The maximum number of Iterations",
+                       MIN_ITERATIONS, MAX_ITERATIONS, ITERATIONS,
+                       G_PARAM_READWRITE);
+
+  props[PROP_ZOOM_LEVEL] =
+    g_param_spec_double ("zoom-level", "Zoom level", "Zoom level",
+                         MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL, 0,
+                         G_PARAM_READWRITE);
+
 
   g_object_class_install_properties (gobject_class,
                                      N_PROPS,
@@ -304,7 +331,7 @@ get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
                           zoom_level,
                           win->cre,
                           win->cim,
-                          MAX_ITERATIONS};
+                          win->iterations};
       julia_pixbuf_update_mt (jp, &jv_tmp);
 
       /* transfer ownership of jp->pixbuf to gdk_pixbuf */
@@ -389,7 +416,6 @@ jse_window_set_cim (JseWindow *win, double cim)
 
   win->cim = cim;
 
-  /* don't blow up the memory! */
   g_hash_table_remove_all (win->hashtable);
   update_image (win);
 
@@ -402,6 +428,26 @@ double
 jse_window_get_cim (JseWindow *win)
 {
   return win->cim;
+}
+
+void
+jse_window_set_iterations (JseWindow *win,
+                           guint iterations)
+{
+  if (win->iterations == iterations)
+    return;
+
+  win->iterations = iterations;
+  g_hash_table_remove_all (win->hashtable);
+  update_image (win);
+
+  g_object_notify_by_pspec (G_OBJECT (win), props[PROP_ITERATIONS]);
+}
+
+guint
+jse_window_get_iterations (JseWindow *win)
+{
+  return win->iterations;
 }
 
 static gboolean

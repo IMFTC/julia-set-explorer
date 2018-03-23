@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.20.3 -->
+<!-- Generated with glade 3.20.4 -->
 <interface>
   <requires lib="gtk+" version="3.20"/>
   <object class="GtkAdjustment" id="adjustment_cim">
@@ -13,6 +13,12 @@
     <property name="upper">1</property>
     <property name="step_increment">0.001</property>
     <property name="page_increment">0.01</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustment_iterations">
+    <property name="upper">1000</property>
+    <property name="value">200</property>
+    <property name="step_increment">10</property>
+    <property name="page_increment">50</property>
   </object>
   <object class="GtkAdjustment" id="adjustment_zoom">
     <property name="upper">200</property>
@@ -170,6 +176,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="label" translatable="yes">a:</property>
+            <property name="xalign">1</property>
           </object>
           <packing>
             <property name="left_attach">0</property>
@@ -181,6 +188,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="label" translatable="yes">b:</property>
+            <property name="xalign">1</property>
           </object>
           <packing>
             <property name="left_attach">0</property>
@@ -197,6 +205,30 @@
             <property name="left_attach">0</property>
             <property name="top_attach">0</property>
             <property name="width">2</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkLabel" id="label_iterations">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="label" translatable="yes">Iterations:</property>
+            <property name="xalign">1</property>
+          </object>
+          <packing>
+            <property name="left_attach">0</property>
+            <property name="top_attach">3</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkSpinButton" id="spinbutton_iterations">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="text" translatable="yes">0,000</property>
+            <property name="adjustment">adjustment_iterations</property>
+          </object>
+          <packing>
+            <property name="left_attach">1</property>
+            <property name="top_attach">3</property>
           </packing>
         </child>
       </object>
