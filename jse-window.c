@@ -194,15 +194,19 @@ jse_window_set_property (GObject *object,
     case PROP_CRE:
       jse_window_set_cre (win, g_value_get_double (value));
       break;
+
     case PROP_CIM:
       jse_window_set_cim (win, g_value_get_double (value));
       break;
+
     case PROP_ITERATIONS:
       jse_window_set_iterations (win, g_value_get_uint (value));
       break;
+
     case PROP_ZOOM_LEVEL:
       jse_window_set_zoom_level (win, g_value_get_double (value));
       break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -222,15 +226,19 @@ jse_window_get_property (GObject *object,
     case PROP_CRE:
       g_value_set_double (value, jse_window_get_cre (win));
       break;
+
     case PROP_CIM:
       g_value_set_double (value, jse_window_get_cim (win));
       break;
+
     case PROP_ITERATIONS:
       g_value_set_uint (value, jse_window_get_iterations (win));
       break;
+
     case PROP_ZOOM_LEVEL:
       g_value_set_double (value, jse_window_get_zoom_level (win));
       break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -469,6 +477,7 @@ image_scroll_event_cb (GtkWidget *unused,
           return TRUE;
         }
       break;
+
     case GDK_SCROLL_UP:
       if (zoom_level > MIN_ZOOM_LEVEL)
         zoom_level--;
@@ -478,9 +487,11 @@ image_scroll_event_cb (GtkWidget *unused,
           return TRUE;
         }
       break;
+
     case GDK_SCROLL_SMOOTH:
       g_message ("Smooth scrolling not implementet yet!");
       /* fall through */
+
     default:
       g_message ("Unhandled scroll direction!");
       return TRUE;
