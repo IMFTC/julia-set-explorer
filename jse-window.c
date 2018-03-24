@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <clutter-gtk/clutter-gtk.h>
 
 #include "jse-window.h"
 #include "julia.h"
@@ -77,6 +78,9 @@ struct _JseWindow
   GtkAdjustment *adjustment_iterations;
   GtkAdjustment *adjustment_zoom;
   GtkScale *scale_zoom;
+  GtkWidget *vbox;
+  GtkWidget *clutter_embed;
+  ClutterActor *stage;
 
   double zoom_level;
   gboolean pointer_in_image;
@@ -85,8 +89,6 @@ struct _JseWindow
 /* final types don't need private data */
 G_DEFINE_TYPE (JseWindow, jse_window, GTK_TYPE_APPLICATION_WINDOW);
 
-static void pixbuf_destroy_notify (guchar *pixels,
-                                   gpointer data);
 static void update_position_label (JseWindow *win,
                                    gdouble x,
                                    gdouble y);
@@ -98,6 +100,7 @@ static gboolean image_motion_notify_event_cb (JseWindow *win,
 static gboolean image_enter_notify_event_cb (JseWindow *win);
 static gboolean image_leave_notify_event_cb (JseWindow *win);
 static void update_button_c_label (JseWindow *win);
+static void update_image (JseWindow *win);
 
 static void
 jse_window_init (JseWindow *window)
@@ -122,14 +125,6 @@ jse_window_init (JseWindow *window)
                                              g_direct_equal,
                                              NULL,
                                              g_object_unref);
-
-  gtk_widget_add_events (GTK_WIDGET (window->eventbox),
-                         GDK_SCROLL_MASK
-                         /* TODO: Implement smooth scrolling support */
-                         // | GDK_SMOOTH_SCROLL_MASK
-                         | GDK_POINTER_MOTION_MASK
-                         | GDK_ENTER_NOTIFY_MASK
-                         | GDK_LEAVE_NOTIFY_MASK);
 
   jse_window_set_zoom_level (window, 0);
 
@@ -165,8 +160,20 @@ jse_window_init (JseWindow *window)
                           G_BINDING_BIDIRECTIONAL
                           | G_BINDING_SYNC_CREATE);
 
-  window->pointer_in_image = FALSE;
+
+  /* ensure fixed size and aspect ratio */
+  gtk_widget_set_size_request (window->clutter_embed, PIXBUF_WIDTH, PIXBUF_HEIGHT);
+  gtk_widget_set_halign (window->clutter_embed, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (window->clutter_embed, GTK_ALIGN_CENTER);
+
+  window->stage = gtk_clutter_embed_get_stage (GTK_CLUTTER_EMBED (window->clutter_embed));
+
+  update_image (window);
+  gtk_widget_show (window->clutter_embed);
+
   update_button_c_label (window);
+
+  window->pointer_in_image = FALSE;
 }
 
 static void
@@ -256,8 +263,7 @@ jse_window_class_init (JseWindowClass *class)
 
   gtk_widget_class_set_template_from_resource (GTK_WIDGET_CLASS (class),
                                                "/org/gnome/jse/window.ui");
-  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, eventbox);
-  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, image);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, vbox);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, label_position);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_zoom);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, button_c);
@@ -266,6 +272,7 @@ jse_window_class_init (JseWindowClass *class)
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_cre);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_cim);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_iterations);
+  gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, clutter_embed);
 
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_scroll_event_cb);
   gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_motion_notify_event_cb);
@@ -305,11 +312,11 @@ jse_window_new (GtkApplication *app)
                        NULL);
 }
 
-GdkPixbuf *
-get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
+ClutterContent *
+get_clutter_content_for_zoom_level (JseWindow *win, gint zoom_level)
 {
   GHashTable *hashtable = win->hashtable;
-  GdkPixbuf *gdk_pixbuf;
+  ClutterContent *image;
   JuliaPixbuf *jp;
   gpointer orig_key;
   gpointer value;
@@ -321,7 +328,7 @@ get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
     {
       /* hash table hit */
 
-      gdk_pixbuf = (GdkPixbuf *) value;
+      image = (ClutterContent *) value;
       g_debug ("Cache hit for zoom level %d", zoom_level);
     }
   else
@@ -342,35 +349,35 @@ get_pixbuf_for_zoom_level (JseWindow *win, gint zoom_level)
                           win->iterations};
       julia_pixbuf_update_mt (jp, &jv_tmp);
 
-      /* transfer ownership of jp->pixbuf to gdk_pixbuf */
-      gdk_pixbuf = gdk_pixbuf_new_from_data (jp->pixbuf,
-                                             GDK_COLORSPACE_RGB,
-                                             FALSE,
-                                             8,
-                                             jp->pix_width,
-                                             jp->pix_height,
-                                             jp->pix_width * 3,
-                                             pixbuf_destroy_notify,
-                                             NULL);
-      free (jp);
+      image = clutter_image_new ();
+      clutter_image_set_data (CLUTTER_IMAGE (image),
+                              jp->pixbuf,
+                              COGL_PIXEL_FORMAT_RGB_888,
+                              jp->pix_width,
+                              jp->pix_height,
+                              jp->pix_width * 3,
+                              NULL);
+      julia_pixbuf_destroy (jp);
 
       g_hash_table_insert (hashtable,
                            GINT_TO_POINTER (zoom_level),
-                           (gpointer) gdk_pixbuf);
+                           (gpointer) image);
+
     };
 
-  g_debug ("get_pixbuf_for_zoom_level (%p, %d): %p", win, zoom_level, gdk_pixbuf);
+  g_debug ("get_clutter_content_for_zoom_level (%p, %d): %p", win, zoom_level, image);
 
-  return gdk_pixbuf;
+  return image;
 }
 
 void
 update_image (JseWindow *win)
 {
-  GdkPixbuf *gdk_pixbuf = get_pixbuf_for_zoom_level (win, win->zoom_level);
+  ClutterContent *image = get_clutter_content_for_zoom_level (win, win->zoom_level);
 
-  gtk_image_set_from_pixbuf (win->image, gdk_pixbuf);
-  g_debug ("update_image: using GdkPixbuf %p", gdk_pixbuf);
+  clutter_actor_set_content (CLUTTER_ACTOR (win->stage), image);
+
+  g_debug ("update_image: using ClutterContent %p", image);
 }
 
 
@@ -565,12 +572,4 @@ image_leave_notify_event_cb (JseWindow *win)
   update_position_label (win, 0, 0);
 
   return TRUE;
-}
-
-static void
-pixbuf_destroy_notify (guchar *pixels,
-                       gpointer data)
-{
-  g_debug ("Freeing pixel data at %p", pixels);
-  g_free (pixels);
 }

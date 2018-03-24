@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
-
+#include <clutter/clutter.h>
+#include <clutter-gtk/clutter-gtk.h>
 #include "jse-window.h"
 
 static void
@@ -17,6 +18,14 @@ int
 main (int    argc,
       char **argv)
 {
+
+  /* FIXME: This is weird, I don't know yet where this really belongs */
+  ClutterInitError error = gtk_clutter_init (&argc, &argv);
+  if (error != CLUTTER_INIT_SUCCESS)
+    {
+      g_critical ("Failed to initialize Clutter");
+      return 1;
+    }
 
   GtkApplication *app;
   int status;
