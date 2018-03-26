@@ -92,13 +92,13 @@ G_DEFINE_TYPE (JseWindow, jse_window, GTK_TYPE_APPLICATION_WINDOW);
 static void update_position_label (JseWindow *win,
                                    gdouble x,
                                    gdouble y);
-static gboolean image_scroll_event_cb (GtkWidget *unused,
+static gboolean clutter_embed_scroll_event_cb (GtkWidget *unused,
                                        GdkEventScroll *event,
                                        JseWindow *user_data);
-static gboolean image_motion_notify_event_cb (JseWindow *win,
+static gboolean clutter_embed_motion_notify_event_cb (JseWindow *win,
                                               GdkEventMotion *event);
-static gboolean image_enter_notify_event_cb (JseWindow *win);
-static gboolean image_leave_notify_event_cb (JseWindow *win);
+static gboolean clutter_embed_enter_notify_event_cb (JseWindow *win);
+static gboolean clutter_embed_leave_notify_event_cb (JseWindow *win);
 static void update_button_c_label (JseWindow *win);
 static void update_image (JseWindow *win);
 
@@ -274,10 +274,10 @@ jse_window_class_init (JseWindowClass *class)
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_iterations);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, clutter_embed);
 
-  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_scroll_event_cb);
-  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_motion_notify_event_cb);
-  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_enter_notify_event_cb);
-  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), image_leave_notify_event_cb);
+  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), clutter_embed_scroll_event_cb);
+  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), clutter_embed_motion_notify_event_cb);
+  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), clutter_embed_enter_notify_event_cb);
+  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), clutter_embed_leave_notify_event_cb);
 
   props[PROP_CRE] =
     g_param_spec_double ("cre", "c_re", "real part of c",
@@ -466,9 +466,9 @@ jse_window_get_iterations (JseWindow *win)
 }
 
 static gboolean
-image_scroll_event_cb (GtkWidget *unused,
-                       GdkEventScroll *event,
-                       JseWindow *win)
+clutter_embed_scroll_event_cb (GtkWidget *unused,
+                               GdkEventScroll *event,
+                               JseWindow *win)
 {
   g_debug ("scroll-event at (%3f, %3f)", event->x, event->y);
   gint zoom_level = win->zoom_level;
@@ -546,8 +546,8 @@ update_position_label (JseWindow *win,
 }
 
 static gboolean
-image_motion_notify_event_cb (JseWindow *win,
-                              GdkEventMotion *event)
+clutter_embed_motion_notify_event_cb (JseWindow *win,
+                                      GdkEventMotion *event)
 
 {
   // g_debug ("motion-notify event at (%f, %f)", event->x, event->y);
@@ -558,7 +558,7 @@ image_motion_notify_event_cb (JseWindow *win,
 }
 
 static gboolean
-image_enter_notify_event_cb (JseWindow *win)
+clutter_embed_enter_notify_event_cb (JseWindow *win)
 {
   win->pointer_in_image = TRUE;
 
@@ -566,7 +566,7 @@ image_enter_notify_event_cb (JseWindow *win)
 }
 
 static gboolean
-image_leave_notify_event_cb (JseWindow *win)
+clutter_embed_leave_notify_event_cb (JseWindow *win)
 {
   win->pointer_in_image = FALSE;
   update_position_label (win, 0, 0);

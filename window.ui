@@ -38,6 +38,10 @@
           <object class="GtkClutterEmbed" id="clutter_embed">
             <property name="halign">center</property>
             <property name="valign">center</property>
+            <signal name="enter-notify-event" handler="clutter_embed_enter_notify_event_cb" swapped="yes"/>
+            <signal name="leave-notify-event" handler="clutter_embed_leave_notify_event_cb" swapped="yes"/>
+            <signal name="motion-notify-event" handler="clutter_embed_motion_notify_event_cb" object="JseWindow" swapped="yes"/>
+            <signal name="scroll-event" handler="clutter_embed_scroll_event_cb" object="JseWindow" swapped="no"/>
           </object>
         </child>
         <child>
