@@ -167,13 +167,18 @@ jse_window_init (JseWindow *window)
   gtk_widget_set_valign (window->clutter_embed, GTK_ALIGN_CENTER);
 
   window->stage = gtk_clutter_embed_get_stage (GTK_CLUTTER_EMBED (window->clutter_embed));
+  window->pointer_in_image = FALSE;
+}
+
+static void jse_window_constructed (GObject *object)
+{
+  JseWindow *window = JSE_WINDOW (object);
 
   update_image (window);
-  gtk_widget_show (window->clutter_embed);
-
+  update_position_label (window, 0, 0);
   update_button_c_label (window);
 
-  window->pointer_in_image = FALSE;
+  G_OBJECT_CLASS (jse_window_parent_class)->constructed (object);
 }
 
 static void
@@ -257,6 +262,7 @@ jse_window_class_init (JseWindowClass *class)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (class);
 
+  gobject_class->constructed = jse_window_constructed;
   gobject_class->finalize = jse_window_finalize;
   gobject_class->set_property = jse_window_set_property;
   gobject_class->get_property = jse_window_get_property;
@@ -312,11 +318,12 @@ jse_window_new (GtkApplication *app)
                        NULL);
 }
 
-ClutterContent *
-get_clutter_content_for_zoom_level (JseWindow *win, gint zoom_level)
+ClutterActor *
+get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
 {
   GHashTable *hashtable = win->hashtable;
   ClutterContent *image;
+  ClutterActor *actor;
   JuliaPixbuf *jp;
   gpointer orig_key;
   gpointer value;
@@ -328,7 +335,7 @@ get_clutter_content_for_zoom_level (JseWindow *win, gint zoom_level)
     {
       /* hash table hit */
 
-      image = (ClutterContent *) value;
+      actor = (ClutterActor *) value;
       g_debug ("Cache hit for zoom level %d", zoom_level);
     }
   else
@@ -358,26 +365,31 @@ get_clutter_content_for_zoom_level (JseWindow *win, gint zoom_level)
                               jp->pix_width * 3,
                               NULL);
       julia_pixbuf_destroy (jp);
+      actor = clutter_actor_new();
+      clutter_actor_set_content (actor, image);
+      clutter_actor_set_size (actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
+      g_object_unref (image);
 
       g_hash_table_insert (hashtable,
                            GINT_TO_POINTER (zoom_level),
-                           (gpointer) image);
+                           (gpointer) actor);
 
     };
 
-  g_debug ("get_clutter_content_for_zoom_level (%p, %d): %p", win, zoom_level, image);
+  g_debug ("get_clutter_actor_for_zoom_level (%p, %d): %p", win, zoom_level, actor);
 
-  return image;
+  return actor;
 }
 
 static void
 update_image (JseWindow *win)
 {
-  ClutterContent *image = get_clutter_content_for_zoom_level (win, win->zoom_level);
+  ClutterActor *new_actor = get_clutter_actor_for_zoom_level (win, win->zoom_level);
 
-  clutter_actor_set_content (CLUTTER_ACTOR (win->stage), image);
+  clutter_actor_add_child (win->stage, new_actor);
 
-  g_debug ("update_image: using ClutterContent %p", image);
+
+  g_debug ("update_image: adding ClutterActor %p", new_actor);
 }
 
 
@@ -543,6 +555,7 @@ update_position_label (JseWindow *win,
 
   gtk_label_set_text (GTK_LABEL (win->label_position), text->str);
   g_string_free (text, TRUE);
+
 }
 
 static gboolean
