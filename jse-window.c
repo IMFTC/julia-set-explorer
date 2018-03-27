@@ -117,6 +117,8 @@ jse_window_init (JseWindow *window)
   window->cre = C_RE;
   window->cim = C_IM;
 
+  window->zoom_level = 0;
+
   window->iterations = ITERATIONS;
 
   gtk_widget_init_template (GTK_WIDGET (window));
@@ -126,7 +128,6 @@ jse_window_init (JseWindow *window)
                                              NULL,
                                              g_object_unref);
 
-  jse_window_set_zoom_level (window, 0);
 
   gtk_adjustment_set_lower (window->adjustment_zoom, MIN_ZOOM_LEVEL);
   gtk_adjustment_set_upper (window->adjustment_zoom, MAX_ZOOM_LEVEL);
@@ -159,7 +160,6 @@ jse_window_init (JseWindow *window)
                           window->button_c_popover, "visible",
                           G_BINDING_BIDIRECTIONAL
                           | G_BINDING_SYNC_CREATE);
-
 
   /* ensure fixed size and aspect ratio */
   gtk_widget_set_size_request (window->clutter_embed, PIXBUF_WIDTH, PIXBUF_HEIGHT);
@@ -370,7 +370,7 @@ get_clutter_content_for_zoom_level (JseWindow *win, gint zoom_level)
   return image;
 }
 
-void
+static void
 update_image (JseWindow *win)
 {
   ClutterContent *image = get_clutter_content_for_zoom_level (win, win->zoom_level);
