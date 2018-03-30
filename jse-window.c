@@ -392,6 +392,7 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
 
   /* (re)set defaults  */
   clutter_actor_set_size (actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
+  clutter_actor_set_scale (actor, 1.0, 1.0);
   clutter_actor_set_pivot_point (actor, 0.5, 0.5);
 
   g_debug ("get_clutter_actor_for_zoom_level (%p, %d): %p", win, zoom_level, actor);
@@ -399,25 +400,46 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
   return actor;
 }
 
+static GMutex blend_mutex;
+static GCond blend_cond;
+static gboolean blend_in_progress = FALSE;
+
 void
 on_transition_stopped_cb (ClutterActor *actor,
                           gchar *name,
                           gboolean is_finished,
                           gpointer data)
 {
-  JseWindow *win = (JseWindow*) data;
-  /* FIXME: this is not thread-safe */
-  ClutterActor *old_actor = clutter_actor_get_previous_sibling (actor);
+  g_debug ("on_transition_stopped (%p)", actor);
+
+  ClutterActor *old_actor = (ClutterActor *) data;
+
   if (old_actor)
-    clutter_actor_remove_child (win->stage, old_actor);
+    {
+      clutter_actor_remove_child (clutter_actor_get_parent (actor), old_actor);
+      g_debug ("  removing old_actor %p", old_actor);
+    }
 
   g_signal_handlers_disconnect_by_func (actor, on_transition_stopped_cb, data);
-  g_debug ("on_transition_stopped (%p)", actor);
+
+  g_mutex_lock (&blend_mutex);
+  blend_in_progress = FALSE;
+  printf("  blend_in_progress = FALSE\n");
+  g_cond_signal (&blend_cond);
+  g_mutex_unlock (&blend_mutex);
 }
 
 static void
 blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 {
+  g_mutex_lock (&blend_mutex);
+  while (blend_in_progress)
+    g_cond_wait (&blend_cond, &blend_mutex);
+
+  printf("  blend_in_progress = TRUE\n");
+  blend_in_progress = TRUE;
+  g_mutex_unlock (&blend_mutex);
+
   ClutterActor *old_actor = clutter_actor_get_first_child (win->stage);
 
   /* TODO: Cancel any already running blending, as the code is now,
@@ -426,7 +448,7 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 
   /* The time for the zoom animation should at least somewhat
      correspond to the zoom level distance. */
-  gdouble zoom_time = 100  + 100 * log (ABS (old_zoom_level - win->zoom_level));
+  gdouble zoom_time = 100 + log (1 + ABS (old_zoom_level - win->zoom_level));
   printf ("zoom_time: %f\n", zoom_time);
 
   if (old_actor && (old_zoom_level != win->zoom_level))
@@ -436,19 +458,16 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
       clutter_actor_set_scale (old_actor,
                                pow (ZOOM_FACTOR, (old_zoom_level - win->zoom_level)),
                                pow (ZOOM_FACTOR, (old_zoom_level - win->zoom_level)));
-
       clutter_actor_restore_easing_state (old_actor);
     }
 
   ClutterActor *new_actor = get_clutter_actor_for_zoom_level (win, win->zoom_level);
 
-  g_signal_connect (new_actor, "transition-stopped", G_CALLBACK (on_transition_stopped_cb), win);
-
   clutter_actor_set_opacity (new_actor, 0);
   clutter_actor_add_child (win->stage, new_actor);
 
-  clutter_actor_save_easing_state (new_actor);
 
+  clutter_actor_save_easing_state (new_actor);
   /* wait for a (possibly running) scale transition to finish before
      blending in the new actor */
   if (old_actor && (old_zoom_level != win->zoom_level))
@@ -456,9 +475,15 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 
   clutter_actor_set_easing_duration (new_actor, 200);
   clutter_actor_set_opacity (new_actor, 255);
+
+  g_signal_connect (new_actor, "transition-stopped", G_CALLBACK (on_transition_stopped_cb), old_actor);
   clutter_actor_restore_easing_state (new_actor);
 
-  g_debug ("blend_to_new_actor: adding ClutterActor %p", new_actor);
+  /* FIXME: why is this necessary? new_actor should emit
+     "transition-stopped", but doesn't? */
+  on_transition_stopped_cb (new_actor, "unused", TRUE, old_actor);
+
+  g_debug ("blend_to_new_actor: actors: %p -> %p", old_actor, new_actor);
 }
 
 
