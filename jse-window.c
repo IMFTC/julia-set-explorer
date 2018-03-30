@@ -430,7 +430,7 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
   gdouble zoom_time = 100  + 100 * log (ABS (old_zoom_level - win->zoom_level));
   printf ("zoom_time: %f\n", zoom_time);
 
-  if (old_actor)
+  if (old_actor && (old_zoom_level != win->zoom_level))
     {
       clutter_actor_save_easing_state (old_actor);
       clutter_actor_set_easing_duration (old_actor, zoom_time);
@@ -449,8 +449,13 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
   clutter_actor_add_child (win->stage, new_actor);
 
   clutter_actor_save_easing_state (new_actor);
-  clutter_actor_set_easing_delay (new_actor, zoom_time);
-  clutter_actor_set_easing_duration (new_actor, 100);
+
+  /* wait for a (possibly running) scale transition to finish before
+     blending in the new actor */
+  if (old_actor && (old_zoom_level != win->zoom_level))
+    clutter_actor_set_easing_delay (new_actor, zoom_time);
+
+  clutter_actor_set_easing_duration (new_actor, 200);
   clutter_actor_set_opacity (new_actor, 255);
   clutter_actor_restore_easing_state (new_actor);
 
