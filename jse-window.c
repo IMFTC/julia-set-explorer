@@ -407,10 +407,7 @@ on_transition_stopped_cb (ClutterActor *actor,
   /* FIXME: this is not thread-safe */
   ClutterActor *old_actor = clutter_actor_get_previous_sibling (actor);
   if (old_actor)
-    {
-      clutter_actor_remove_child (win->stage, old_actor);
-      clutter_actor_set_size (old_actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
-    }
+    clutter_actor_remove_child (win->stage, old_actor);
 
   g_signal_handlers_disconnect_by_func (actor, on_transition_stopped_cb, data);
   g_debug ("on_transition_stopped (%p)", actor);
