@@ -16,7 +16,7 @@
 
 #define MAX_ITERATIONS 5000
 #define MIN_ITERATIONS 0
-#define ITERATIONS 200
+#define ITERATIONS 500
 
 /* TODO: The user should be able to set these! */
 /* The view of the complex plane to be displayed by the window */
@@ -30,11 +30,11 @@
 /* #define C_RE -0.4 */
 /* #define C_IM +0.6 */
 
-/* #define C_RE -0.7269 */
-/* #define C_IM +0.1889 */
+#define C_RE -0.7269
+#define C_IM +0.1889
 
-#define C_RE -0.8
-#define C_IM +0.156
+/* #define C_RE -0.8 */
+/* #define C_IM +0.156 */
 
 
 enum {
@@ -380,9 +380,9 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
       clutter_actor_set_content (actor, image);
       clutter_actor_set_size (actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
       clutter_actor_set_pivot_point (actor, 0.5, 0.5);
-      clutter_actor_set_content_scaling_filters (actor,
-                                                 CLUTTER_SCALING_FILTER_NEAREST,
-                                                 CLUTTER_SCALING_FILTER_NEAREST);
+      /* clutter_actor_set_content_scaling_filters (actor, */
+      /*                                            CLUTTER_SCALING_FILTER_LINEAR, */
+      /*                                            CLUTTER_SCALING_FILTER_LINEAR); */
 
       g_object_unref (image);
 
