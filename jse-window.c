@@ -378,8 +378,6 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
       actor = clutter_actor_new();
 
       clutter_actor_set_content (actor, image);
-      clutter_actor_set_size (actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
-      clutter_actor_set_pivot_point (actor, 0.5, 0.5);
       /* clutter_actor_set_content_scaling_filters (actor, */
       /*                                            CLUTTER_SCALING_FILTER_LINEAR, */
       /*                                            CLUTTER_SCALING_FILTER_LINEAR); */
@@ -391,6 +389,10 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
                            GINT_TO_POINTER (zoom_level),
                            g_object_ref (actor));
     };
+
+  /* (re)set defaults  */
+  clutter_actor_set_size (actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
+  clutter_actor_set_pivot_point (actor, 0.5, 0.5);
 
   g_debug ("get_clutter_actor_for_zoom_level (%p, %d): %p", win, zoom_level, actor);
 
@@ -439,7 +441,7 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
     }
 
   ClutterActor *new_actor = get_clutter_actor_for_zoom_level (win, win->zoom_level);
-  clutter_actor_set_size (old_actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
+
   g_signal_connect (new_actor, "transition-stopped", G_CALLBACK (on_transition_stopped_cb), win);
 
   clutter_actor_set_opacity (new_actor, 0);
