@@ -11,7 +11,7 @@ activate (GtkApplication *app,
 
   window = jse_window_new (app);
 
-  gtk_widget_show (GTK_WIDGET (window));
+  gtk_widget_show_all (GTK_WIDGET (window));
 }
 
 int

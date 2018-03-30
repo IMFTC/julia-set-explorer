@@ -26,8 +26,16 @@
 #define VIEW_CENTER_RE 0
 #define VIEW_CENTER_IM 0
 /* c as in f(z) = z^2 + c */
-#define C_RE -0.4
-#define C_IM +0.6
+
+/* #define C_RE -0.4 */
+/* #define C_IM +0.6 */
+
+/* #define C_RE -0.7269 */
+/* #define C_IM +0.1889 */
+
+#define C_RE -0.8
+#define C_IM +0.156
+
 
 enum {
   PROP_0,
@@ -100,7 +108,7 @@ static gboolean clutter_embed_motion_notify_event_cb (JseWindow *win,
 static gboolean clutter_embed_enter_notify_event_cb (JseWindow *win);
 static gboolean clutter_embed_leave_notify_event_cb (JseWindow *win);
 static void update_button_c_label (JseWindow *win);
-static void update_image (JseWindow *win);
+static void blend_to_new_actor (JseWindow *win, gdouble old_zoom_level);
 
 static void
 jse_window_init (JseWindow *window)
@@ -167,13 +175,18 @@ jse_window_init (JseWindow *window)
   gtk_widget_set_valign (window->clutter_embed, GTK_ALIGN_CENTER);
 
   window->stage = gtk_clutter_embed_get_stage (GTK_CLUTTER_EMBED (window->clutter_embed));
+  window->pointer_in_image = FALSE;
+}
 
-  update_image (window);
-  gtk_widget_show (window->clutter_embed);
+static void jse_window_constructed (GObject *object)
+{
+  JseWindow *window = JSE_WINDOW (object);
 
+  blend_to_new_actor (window, 0);
+  update_position_label (window, 0, 0);
   update_button_c_label (window);
 
-  window->pointer_in_image = FALSE;
+  G_OBJECT_CLASS (jse_window_parent_class)->constructed (object);
 }
 
 static void
@@ -257,6 +270,7 @@ jse_window_class_init (JseWindowClass *class)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (class);
 
+  gobject_class->constructed = jse_window_constructed;
   gobject_class->finalize = jse_window_finalize;
   gobject_class->set_property = jse_window_set_property;
   gobject_class->get_property = jse_window_get_property;
@@ -312,11 +326,12 @@ jse_window_new (GtkApplication *app)
                        NULL);
 }
 
-ClutterContent *
-get_clutter_content_for_zoom_level (JseWindow *win, gint zoom_level)
+ClutterActor *
+get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
 {
   GHashTable *hashtable = win->hashtable;
   ClutterContent *image;
+  ClutterActor *actor;
   JuliaPixbuf *jp;
   gpointer orig_key;
   gpointer value;
@@ -328,7 +343,7 @@ get_clutter_content_for_zoom_level (JseWindow *win, gint zoom_level)
     {
       /* hash table hit */
 
-      image = (ClutterContent *) value;
+      actor = (ClutterActor *) value;
       g_debug ("Cache hit for zoom level %d", zoom_level);
     }
   else
@@ -359,25 +374,87 @@ get_clutter_content_for_zoom_level (JseWindow *win, gint zoom_level)
                               NULL);
       julia_pixbuf_destroy (jp);
 
+      /* returns a floating reference */
+      actor = clutter_actor_new();
+
+      clutter_actor_set_content (actor, image);
+      clutter_actor_set_size (actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
+      clutter_actor_set_pivot_point (actor, 0.5, 0.5);
+      clutter_actor_set_content_scaling_filters (actor,
+                                                 CLUTTER_SCALING_FILTER_NEAREST,
+                                                 CLUTTER_SCALING_FILTER_NEAREST);
+
+      g_object_unref (image);
+
+
       g_hash_table_insert (hashtable,
                            GINT_TO_POINTER (zoom_level),
-                           (gpointer) image);
-
+                           g_object_ref (actor));
     };
 
-  g_debug ("get_clutter_content_for_zoom_level (%p, %d): %p", win, zoom_level, image);
+  g_debug ("get_clutter_actor_for_zoom_level (%p, %d): %p", win, zoom_level, actor);
 
-  return image;
+  return actor;
+}
+
+void
+on_transition_stopped_cb (ClutterActor *actor,
+                          gchar *name,
+                          gboolean is_finished,
+                          gpointer data)
+{
+  JseWindow *win = (JseWindow*) data;
+  /* FIXME: this is not thread-safe */
+  ClutterActor *old_actor = clutter_actor_get_previous_sibling (actor);
+  if (old_actor)
+    {
+      clutter_actor_remove_child (win->stage, old_actor);
+      clutter_actor_set_size (old_actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
+    }
+
+  g_signal_handlers_disconnect_by_func (actor, on_transition_stopped_cb, data);
+  g_debug ("on_transition_stopped (%p)", actor);
 }
 
 static void
-update_image (JseWindow *win)
+blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 {
-  ClutterContent *image = get_clutter_content_for_zoom_level (win, win->zoom_level);
+  ClutterActor *old_actor = clutter_actor_get_first_child (win->stage);
 
-  clutter_actor_set_content (CLUTTER_ACTOR (win->stage), image);
+  /* TODO: Cancel any already running blending, as the code is now,
+     zooming again before a blend is done results in 'undefined'
+     behavior. */
 
-  g_debug ("update_image: using ClutterContent %p", image);
+  /* The time for the zoom animation should at least somewhat
+     correspond to the zoom level distance. */
+  gdouble zoom_time = 100  + 100 * log (ABS (old_zoom_level - win->zoom_level));
+  printf ("zoom_time: %f\n", zoom_time);
+
+  if (old_actor)
+    {
+      clutter_actor_save_easing_state (old_actor);
+      clutter_actor_set_easing_duration (old_actor, zoom_time);
+      clutter_actor_set_scale (old_actor,
+                               pow (ZOOM_FACTOR, (old_zoom_level - win->zoom_level)),
+                               pow (ZOOM_FACTOR, (old_zoom_level - win->zoom_level)));
+
+      clutter_actor_restore_easing_state (old_actor);
+    }
+
+  ClutterActor *new_actor = get_clutter_actor_for_zoom_level (win, win->zoom_level);
+  clutter_actor_set_size (old_actor, PIXBUF_WIDTH, PIXBUF_HEIGHT);
+  g_signal_connect (new_actor, "transition-stopped", G_CALLBACK (on_transition_stopped_cb), win);
+
+  clutter_actor_set_opacity (new_actor, 0);
+  clutter_actor_add_child (win->stage, new_actor);
+
+  clutter_actor_save_easing_state (new_actor);
+  clutter_actor_set_easing_delay (new_actor, zoom_time);
+  clutter_actor_set_easing_duration (new_actor, 100);
+  clutter_actor_set_opacity (new_actor, 255);
+  clutter_actor_restore_easing_state (new_actor);
+
+  g_debug ("blend_to_new_actor: adding ClutterActor %p", new_actor);
 }
 
 
@@ -387,8 +464,10 @@ jse_window_set_zoom_level (JseWindow *win,
 {
   g_debug ("zoom level: %f", zoom_level);
 
+  gdouble old_zoom_level = win->zoom_level;
+
   win->zoom_level = zoom_level;
-  update_image (win);
+  blend_to_new_actor (win, old_zoom_level);
 
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_ZOOM_LEVEL]);
 }
@@ -410,7 +489,7 @@ jse_window_set_cre (JseWindow *win, double cre)
 
   /* don't blow up the memory! */
   g_hash_table_remove_all (win->hashtable);
-  update_image (win);
+  blend_to_new_actor (win, win->zoom_level);
 
   update_button_c_label (win);
 
@@ -432,7 +511,7 @@ jse_window_set_cim (JseWindow *win, double cim)
   win->cim = cim;
 
   g_hash_table_remove_all (win->hashtable);
-  update_image (win);
+  blend_to_new_actor (win, win->zoom_level);
 
   update_button_c_label (win);
 
@@ -454,7 +533,7 @@ jse_window_set_iterations (JseWindow *win,
 
   win->iterations = iterations;
   g_hash_table_remove_all (win->hashtable);
-  update_image (win);
+  blend_to_new_actor (win, win->zoom_level);
 
   g_object_notify_by_pspec (G_OBJECT (win), props[PROP_ITERATIONS]);
 }
@@ -543,6 +622,7 @@ update_position_label (JseWindow *win,
 
   gtk_label_set_text (GTK_LABEL (win->label_position), text->str);
   g_string_free (text, TRUE);
+
 }
 
 static gboolean
