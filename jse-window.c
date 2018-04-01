@@ -401,7 +401,7 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
   return actor;
 }
 
-void
+static void
 on_transition_stopped_cb (ClutterActor *actor,
                           gchar *name,
                           gboolean is_finished,
@@ -497,8 +497,8 @@ jse_window_set_cre (JseWindow *win, double cre)
 
   win->cre = cre;
 
-  /* don't blow up the memory! */
   g_hash_table_remove_all (win->hashtable);
+
   blend_to_new_actor (win, win->zoom_level);
 
   update_button_c_label (win);
