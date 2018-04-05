@@ -93,7 +93,7 @@ struct _JseWindow
   ClutterActor *current_actor;
 
   double zoom_level;
-  gboolean pointer_in_image;
+  gboolean pointer_in_stage;
 };
 
 /* final types don't need private data */
@@ -102,13 +102,20 @@ G_DEFINE_TYPE (JseWindow, jse_window, GTK_TYPE_APPLICATION_WINDOW);
 static void update_position_label (JseWindow *win,
                                    gdouble x,
                                    gdouble y);
-static gboolean clutter_embed_scroll_event_cb (GtkWidget *unused,
-                                       GdkEventScroll *event,
-                                       JseWindow *user_data);
-static gboolean clutter_embed_motion_notify_event_cb (JseWindow *win,
-                                              GdkEventMotion *event);
-static gboolean clutter_embed_enter_notify_event_cb (JseWindow *win);
-static gboolean clutter_embed_leave_notify_event_cb (JseWindow *win);
+static gboolean stage_leave_notify_event_cb (ClutterActor *stage,
+                                             ClutterEvent *event,
+                                             JseWindow *win);
+static gboolean stage_enter_notify_event_cb (ClutterActor *stage,
+                                             ClutterEvent *event,
+                                             JseWindow *win);
+static gboolean stage_motion_notify_event_cb (ClutterActor *stage,
+                                              ClutterMotionEvent *event,
+                                              JseWindow *win);
+
+static gboolean stage_scroll_event_cb (ClutterActor *actor,
+                                       ClutterScrollEvent *event,
+                                       JseWindow *win);
+
 static void update_button_c_label (JseWindow *win);
 static void blend_to_new_actor (JseWindow *win, gdouble old_zoom_level);
 
@@ -179,7 +186,18 @@ jse_window_init (JseWindow *window)
   gtk_widget_set_valign (window->clutter_embed, GTK_ALIGN_CENTER);
 
   window->stage = gtk_clutter_embed_get_stage (GTK_CLUTTER_EMBED (window->clutter_embed));
-  window->pointer_in_image = FALSE;
+  window->pointer_in_stage = FALSE;
+
+  g_signal_connect (window->stage,"scroll-event",
+                    G_CALLBACK (stage_scroll_event_cb), window);
+  g_signal_connect (window->stage,"leave-event",
+                    G_CALLBACK (stage_leave_notify_event_cb), window);
+  g_signal_connect (window->stage,"enter-event",
+                    G_CALLBACK (stage_enter_notify_event_cb), window);
+  g_signal_connect (window->stage,"motion-event",
+                    G_CALLBACK (stage_motion_notify_event_cb), window);
+
+
 }
 
 static void jse_window_constructed (GObject *object)
@@ -292,11 +310,6 @@ jse_window_class_init (JseWindowClass *class)
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_cim);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, adjustment_iterations);
   gtk_widget_class_bind_template_child (GTK_WIDGET_CLASS (class), JseWindow, clutter_embed);
-
-  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), clutter_embed_scroll_event_cb);
-  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), clutter_embed_motion_notify_event_cb);
-  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), clutter_embed_enter_notify_event_cb);
-  gtk_widget_class_bind_template_callback (GTK_WIDGET_CLASS (class), clutter_embed_leave_notify_event_cb);
 
   props[PROP_CRE] =
     g_param_spec_double ("cre", "c_re", "real part of c",
@@ -430,18 +443,18 @@ static void
 blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 {
   ClutterActor *old_actor = win->current_actor;
+  gdouble zoom_time;
 
   /* TODO: Cancel any already running blending, as the code is now,
      zooming again before a blend is done results in 'undefined'
      behavior. */
 
-  /* The time for the zoom animation should at least somewhat
-     correspond to the zoom level distance. */
-  gdouble zoom_time = 100 + 100 * log (1 + ABS (old_zoom_level - win->zoom_level));
-  printf ("zoom_time: %f\n", zoom_time);
-
   if (old_actor && (old_zoom_level != win->zoom_level))
     {
+      /* The time for the zoom animation should at least somewhat
+         correspond to the zoom level distance. */
+      zoom_time = 100 + 100 * log (1 + ABS (old_zoom_level - win->zoom_level));
+      g_debug ("zoom_time: %f", zoom_time);
       clutter_actor_save_easing_state (old_actor);
       clutter_actor_set_easing_duration (old_actor, zoom_time);
       clutter_actor_set_scale (old_actor,
@@ -457,11 +470,10 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 
   clutter_actor_save_easing_state (new_actor);
 
-  /* wait for a (possibly running) scale transition to finish before
-     blending in the new actor */
+  /* wait for a possible scale transition to finish before blending in
+     the new actor */
   if (old_actor && (old_zoom_level != win->zoom_level))
     clutter_actor_set_easing_delay (new_actor, zoom_time);
-
   clutter_actor_set_easing_duration (new_actor, 200);
   clutter_actor_set_opacity (new_actor, 255);
   clutter_actor_restore_easing_state (new_actor);
@@ -469,7 +481,8 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
   g_signal_connect (new_actor, "transition-stopped::opacity",
                     G_CALLBACK (on_transition_stopped_cb), win);
 
-  /* on_transition_stopped_cb (new_actor, "unused", TRUE, old_actor); */
+  /* if (!old_actor) */
+  /*   on_transition_stopped_cb (new_actor, "unused", TRUE, win); */
   g_debug ("blend_to_new_actor: actors: %p -> %p", old_actor, new_actor);
 }
 
@@ -561,16 +574,17 @@ jse_window_get_iterations (JseWindow *win)
 }
 
 static gboolean
-clutter_embed_scroll_event_cb (GtkWidget *unused,
-                               GdkEventScroll *event,
-                               JseWindow *win)
+stage_scroll_event_cb (ClutterActor *stage,
+                       ClutterScrollEvent *event,
+                       JseWindow *win)
 {
   g_debug ("scroll-event at (%3f, %3f)", event->x, event->y);
   gint zoom_level = win->zoom_level;
+  gdouble dx, dy;
 
   switch (event->direction)
     {
-    case GDK_SCROLL_DOWN:
+    case CLUTTER_SCROLL_DOWN:
       if (zoom_level < MAX_ZOOM_LEVEL)
         zoom_level++;
       else
@@ -580,7 +594,7 @@ clutter_embed_scroll_event_cb (GtkWidget *unused,
         }
       break;
 
-    case GDK_SCROLL_UP:
+    case CLUTTER_SCROLL_UP:
       if (zoom_level > MIN_ZOOM_LEVEL)
         zoom_level--;
       else
@@ -590,9 +604,17 @@ clutter_embed_scroll_event_cb (GtkWidget *unused,
         }
       break;
 
-    case GDK_SCROLL_SMOOTH:
-      g_message ("Smooth scrolling not implementet yet!");
-      /* fall through */
+    case CLUTTER_SCROLL_SMOOTH:
+      clutter_event_get_scroll_delta ((ClutterEvent *) event, &dx, &dy);
+      g_debug ("CLUTTER_SCROLL_SMOOTH with dx=%f, dy=%f\n", dx, dy);
+      /* TODO: take the actual values into account? */
+      if (dy > 0)
+        zoom_level++;
+      else if (dy < 0)
+        zoom_level--;
+      else
+        g_warning ("Smooth scroll delta of 0\n");
+      break;
 
     default:
       g_message ("Unhandled scroll direction!");
@@ -604,7 +626,7 @@ clutter_embed_scroll_event_cb (GtkWidget *unused,
   update_position_label (win, event->x, event->y);
 
   /* stop further handling of event */
-  return TRUE;
+  return CLUTTER_EVENT_STOP;
 }
 
 static void
@@ -631,7 +653,7 @@ update_position_label (JseWindow *win,
   double pos_im = win->view_center_im + height * (0.5 - y / win->pixbuf_height);
 
   GString *text = g_string_new (NULL);
-  if (win->pointer_in_image)
+  if (win->pointer_in_stage)
     g_string_printf (text, "pos: %+.15f %+1.15fi", pos_re, pos_im);
   else
     g_string_printf (text, "pos: (pointer outside of image)");
@@ -642,29 +664,34 @@ update_position_label (JseWindow *win,
 }
 
 static gboolean
-clutter_embed_motion_notify_event_cb (JseWindow *win,
-                                      GdkEventMotion *event)
-
+stage_motion_notify_event_cb (ClutterActor *stage,
+                              ClutterMotionEvent *event,
+                              JseWindow *win)
 {
   // g_debug ("motion-notify event at (%f, %f)", event->x, event->y);
 
   update_position_label (win, event->x, event->y);
 
-  return TRUE;
-}
-
-static gboolean
-clutter_embed_enter_notify_event_cb (JseWindow *win)
-{
-  win->pointer_in_image = TRUE;
 
   return TRUE;
 }
 
 static gboolean
-clutter_embed_leave_notify_event_cb (JseWindow *win)
+stage_enter_notify_event_cb (ClutterActor *stage,
+                             ClutterEvent *event,
+                             JseWindow *win)
 {
-  win->pointer_in_image = FALSE;
+  win->pointer_in_stage = TRUE;
+
+  return TRUE;
+}
+
+static gboolean
+stage_leave_notify_event_cb (ClutterActor *stage,
+                             ClutterEvent *event,
+                             JseWindow *win)
+{
+  win->pointer_in_stage = FALSE;
   update_position_label (win, 0, 0);
 
   return TRUE;
