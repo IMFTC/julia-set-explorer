@@ -196,8 +196,6 @@ jse_window_init (JseWindow *window)
                     G_CALLBACK (stage_enter_notify_event_cb), window);
   g_signal_connect (window->stage,"motion-event",
                     G_CALLBACK (stage_motion_notify_event_cb), window);
-
-
 }
 
 static void jse_window_constructed (GObject *object)
@@ -402,7 +400,6 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
 
       g_object_unref (image);
 
-
       g_hash_table_insert (hashtable,
                            GINT_TO_POINTER (zoom_level),
                            g_object_ref (actor));
@@ -440,6 +437,12 @@ on_transition_stopped_cb (ClutterActor *actor,
   g_signal_handlers_disconnect_by_func (actor, on_transition_stopped_cb, data);
 }
 
+
+/* TODO: So far I think this should probably work like this: When
+   zooming (scroll wheel, pinching, ...) the current_actor should be
+   scaled accordingly and after a small timeout (or when the touch
+   stops) the new actor for the destination zoom level should be
+   calculated and faded in over the old (scaled) actor. */
 static void
 blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 {
@@ -466,12 +469,13 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 
   ClutterActor *new_actor = get_clutter_actor_for_zoom_level (win, win->zoom_level);
 
+  clutter_actor_show (new_actor);
   clutter_actor_set_opacity (new_actor, 0);
   clutter_actor_add_child (win->stage, new_actor);
 
   clutter_actor_save_easing_state (new_actor);
 
-  /* wait for a possible scale transition to finish before blending in
+  /* wait for a possible scale transition to finish before fading in
      the new actor */
   if (old_actor && (old_zoom_level != win->zoom_level))
     clutter_actor_set_easing_delay (new_actor, zoom_time);
@@ -482,8 +486,12 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
   g_signal_connect (new_actor, "transition-stopped::opacity",
                     G_CALLBACK (on_transition_stopped_cb), win);
 
-  /* if (!old_actor) */
-  /*   on_transition_stopped_cb (new_actor, "unused", TRUE, win); */
+  /* FIXME: This should not be necessary, why isn't
+     on_transition_stopped_cb called for the first actor that is
+     created? */
+  if (!old_actor)
+    on_transition_stopped_cb (new_actor, "unused", TRUE, win);
+
   g_debug ("blend_to_new_actor: actors: %p -> %p", old_actor, new_actor);
 }
 
