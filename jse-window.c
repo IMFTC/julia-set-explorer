@@ -90,6 +90,8 @@ struct _JseWindow
   GtkWidget *clutter_embed;
   ClutterActor *stage;
 
+  ClutterActor *current_actor;
+
   double zoom_level;
   gboolean pointer_in_image;
 };
@@ -124,6 +126,8 @@ jse_window_init (JseWindow *window)
 
   window->cre = C_RE;
   window->cim = C_IM;
+
+  window->current_actor = NULL;
 
   window->zoom_level = 0;
 
@@ -409,13 +413,15 @@ on_transition_stopped_cb (ClutterActor *actor,
 {
   g_debug ("on_transition_stopped (%p), transition: %s", actor, name);
 
-  ClutterActor *old_actor = (ClutterActor *) data;
+  JseWindow *win = (JseWindow *) data;
 
-  if (old_actor)
+  if (win->current_actor)
     {
-      clutter_actor_remove_child (clutter_actor_get_parent (actor), old_actor);
-      g_debug ("  removing old_actor %p", old_actor);
+      clutter_actor_remove_child (win->stage, win->current_actor);
+      g_debug ("  removing old_actor %p", actor);
     }
+
+  win->current_actor = actor;
 
   g_signal_handlers_disconnect_by_func (actor, on_transition_stopped_cb, data);
 }
@@ -423,7 +429,7 @@ on_transition_stopped_cb (ClutterActor *actor,
 static void
 blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 {
-  ClutterActor *old_actor = clutter_actor_get_first_child (win->stage);
+  ClutterActor *old_actor = win->current_actor;
 
   /* TODO: Cancel any already running blending, as the code is now,
      zooming again before a blend is done results in 'undefined'
@@ -461,7 +467,7 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
   clutter_actor_restore_easing_state (new_actor);
 
   g_signal_connect (new_actor, "transition-stopped::opacity",
-                    G_CALLBACK (on_transition_stopped_cb), old_actor);
+                    G_CALLBACK (on_transition_stopped_cb), win);
 
   /* on_transition_stopped_cb (new_actor, "unused", TRUE, old_actor); */
   g_debug ("blend_to_new_actor: actors: %p -> %p", old_actor, new_actor);
