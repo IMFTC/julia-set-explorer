@@ -431,7 +431,7 @@ on_transition_stopped_cb (ClutterActor *actor,
       clutter_actor_remove_child (win->stage, win->current_actor);
     }
 
-  g_debug ("  setting current_actor %p", win->current_actor);
+  g_debug ("  setting current_actor %p", actor);
   win->current_actor = actor;
 
   g_signal_handlers_disconnect_by_func (actor, on_transition_stopped_cb, data);
