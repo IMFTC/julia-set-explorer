@@ -447,20 +447,23 @@ static void
 blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
 {
   ClutterActor *old_actor = win->current_actor;
-  gdouble zoom_time;
+  gdouble scale_time;
+  gint zoom_level_delta = ABS (old_zoom_level - win->zoom_level);
 
-  /* TODO: Cancel any already running blending, as the code is now,
-     zooming again before a blend is done results in 'undefined'
-     behavior. */
+  /* Don't use scaling tween (it would be too slow, especially if we
+     already have the new actor in the hastable) if only zooming by
+     one step, i.e. when continuously scrolling with the mouse
+     wheel. */
+  gboolean use_scaling = old_actor && zoom_level_delta > 1;
 
-  if (old_actor && (old_zoom_level != win->zoom_level))
+  if (use_scaling)
     {
       /* The time for the zoom animation should at least somewhat
          correspond to the zoom level distance. */
-      zoom_time = 100 + 100 * log (1 + ABS (old_zoom_level - win->zoom_level));
-      g_debug ("zoom_time: %f", zoom_time);
+      scale_time = 100 + 100 * log (1 + ABS (old_zoom_level - win->zoom_level));
+      g_debug ("scale_time: %f", scale_time);
       clutter_actor_save_easing_state (old_actor);
-      clutter_actor_set_easing_duration (old_actor, zoom_time);
+      clutter_actor_set_easing_duration (old_actor, scale_time);
       clutter_actor_set_scale (old_actor,
                                pow (ZOOM_FACTOR, (old_zoom_level - win->zoom_level)),
                                pow (ZOOM_FACTOR, (old_zoom_level - win->zoom_level)));
@@ -468,29 +471,33 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
     }
 
   ClutterActor *new_actor = get_clutter_actor_for_zoom_level (win, win->zoom_level);
-
-  clutter_actor_show (new_actor);
   clutter_actor_set_opacity (new_actor, 0);
   clutter_actor_add_child (win->stage, new_actor);
 
   clutter_actor_save_easing_state (new_actor);
 
-  /* wait for a possible scale transition to finish before fading in
-     the new actor */
-  if (old_actor && (old_zoom_level != win->zoom_level))
-    clutter_actor_set_easing_delay (new_actor, zoom_time);
-  clutter_actor_set_easing_duration (new_actor, 200);
+  if (use_scaling)
+    /* wait for a possible scale transition to finish before fading in
+       the new actor */
+    clutter_actor_set_easing_delay (new_actor, scale_time);
+
+  if (zoom_level_delta == 1)
+    clutter_actor_set_easing_duration (new_actor, 0);
+  else
+    clutter_actor_set_easing_duration (new_actor, 100);
+
   clutter_actor_set_opacity (new_actor, 255);
+
   clutter_actor_restore_easing_state (new_actor);
 
-  g_signal_connect (new_actor, "transition-stopped::opacity",
-                    G_CALLBACK (on_transition_stopped_cb), win);
-
-  /* FIXME: This should not be necessary, why isn't
-     on_transition_stopped_cb called for the first actor that is
+  /* FIXME: This should not be necessary for the !old_actor case, why
+     isn't on_transition_stopped_cb called for the first actor that is
      created? */
-  if (!old_actor)
+  if (zoom_level_delta == 1 || !old_actor)
     on_transition_stopped_cb (new_actor, "unused", TRUE, win);
+  else
+    g_signal_connect (new_actor, "transition-stopped::opacity",
+                      G_CALLBACK (on_transition_stopped_cb), win);
 
   g_debug ("blend_to_new_actor: actors: %p -> %p", old_actor, new_actor);
 }
