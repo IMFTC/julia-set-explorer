@@ -17,6 +17,13 @@ void jse_window_set_cim (JseWindow *win,
                          double cim);
 double jse_window_get_cim (JseWindow *win);
 
+void jse_window_get_center (JseWindow *win,
+                            gdouble *x,
+                            gdouble *y);
+void jse_window_set_center (JseWindow *win,
+                            gdouble x,
+                            gdouble y);
+
 gdouble jse_window_get_center_re (JseWindow *win);
 void jse_window_set_center_re (JseWindow *win,
                                gdouble x);

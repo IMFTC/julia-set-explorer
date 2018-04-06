@@ -617,6 +617,31 @@ jse_window_get_cim (JseWindow *win)
   return win->cim;
 }
 
+void
+jse_window_set_center (JseWindow *win, gdouble x, gdouble y)
+{
+  win->center_re = x;
+  win->center_im = y;
+  g_hash_table_remove_all (win->hashtable);
+  blend_to_new_actor (win, win->zoom_level);
+
+  /* TODO: Add a new signal for this? */
+  g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CENTER_RE]);
+  g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CENTER_IM]);
+}
+
+void
+jse_window_get_center (JseWindow *win,
+                       gdouble *x,
+                       gdouble *y)
+{
+  g_assert (JSE_IS_WINDOW (win));
+  if (x)
+    *x = win->center_re;
+  if (y)
+    *y = win->center_im;
+}
+
 gdouble
 jse_window_get_center_re (JseWindow *win)
 {
@@ -644,7 +669,8 @@ jse_window_get_center_im (JseWindow *win)
 }
 
 void
-jse_window_set_center_im (JseWindow *win, gdouble y)
+jse_window_set_center_im (JseWindow *win,
+                          gdouble y)
 {
   if (win->center_im == y)
     return;
@@ -814,15 +840,18 @@ stage_leave_notify_event_cb (ClutterActor *stage,
 
 static
 gboolean stage_button_press_event_cb (ClutterActor *actor,
-                                             ClutterButtonEvent *event,
-                                             gpointer user_data)
+                                      ClutterButtonEvent *event,
+                                      gpointer user_data)
 {
   JseWindow *win = JSE_WINDOW (user_data);
   gdouble x, y;
 
   get_complex_number_at_pos (win, event->x, event->y, &x, &y);
 
-  g_debug ("ClutterButtonEvent at (%f, %f), complex number: %f + %fi", event->x, event->y, x, y);
+  g_debug ("ClutterButtonEvent at (%f, %f), complex number: %f + %fi",
+           event->x, event->y, x, y);
+
+  jse_window_set_center (win, x, y);
 
   return TRUE;
 }

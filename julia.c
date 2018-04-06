@@ -92,6 +92,9 @@ julia_pixbuf_update_partial (void *data)
   char max_iter_color[3] = {0};
   unsigned char *first_pixel, *last_pixel, *mirrored_pixel;
 
+  /* is mirroring at (0,0) is possible? */
+  int use_mirroring = (centerx == 0) && (centery == 0);
+
   // printf("thread number: %d\n", thread);
 
   /* Address of first byte of  pixel (one pixel is 3 bytes). */
@@ -101,7 +104,9 @@ julia_pixbuf_update_partial (void *data)
 
   /* Update every pixel taking advantage of the symmetry by filling
    * the left and right half at once. */
-  for (int x = thread; x < pix_width / 2; x += n_threads) {
+  int x_max = use_mirroring ? pix_width / 2 : pix_width;
+
+  for (int x = thread; x < x_max; x += n_threads) {
     zx_tmp = centerx + width * ((double) x / (double) pix_width - 0.5);
     for (int y = 0; y < pix_height; y++) {
       /* Get the re and im parts for the complex number corresponding
@@ -131,7 +136,8 @@ julia_pixbuf_update_partial (void *data)
       /* TODO: Use a proper colormap */
       if (iteration == max_iterations) {
         memcpy(pixel, max_iter_color, 3);
-        memcpy(mirrored_pixel, max_iter_color, 3);
+        if (use_mirroring)
+          memcpy(mirrored_pixel, max_iter_color, 3);
         /* DEBUG: use some hue for the mirrored/thread part: */
         /* pixel[thread % 3] = 20; */
         /* mirrored_pixel[thread % 3] = 100; */
@@ -139,7 +145,8 @@ julia_pixbuf_update_partial (void *data)
         pixel[RED] = 255 - (color_scale * iteration);
         pixel[GREEN] = pixel[RED];
         pixel[BLUE] = pixel[RED];
-        memcpy(mirrored_pixel, pixel, 3);
+        if (use_mirroring)
+          memcpy(mirrored_pixel, pixel, 3);
         /* DEBUG: use some hue for the mirrored part: */
         /* pixel[thread % 3] = 20; */
         /* mirrored_pixel[thread % 3] = 100; */
