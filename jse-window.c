@@ -22,9 +22,9 @@
 /* The view of the complex plane to be displayed by the window */
 #define VIEW_WIDTH 4
 #define VIEW_HEIGHT 4
-/* TODO: This MUST be (0, 0) for now since we assume symmetry */
-#define VIEW_CENTER_RE 0
-#define VIEW_CENTER_IM 0
+
+#define CENTER_RE 0
+#define CENTER_IM 0
 /* c as in f(z) = z^2 + c */
 
 /* #define C_RE -0.4 */
@@ -41,6 +41,8 @@ enum {
   PROP_0,
   PROP_CRE,
   PROP_CIM,
+  PROP_CENTER_RE,
+  PROP_CENTER_IM,
   PROP_ITERATIONS,
   PROP_ZOOM_LEVEL,
   N_PROPS
@@ -56,13 +58,12 @@ struct _JseWindow
   gdouble view_width;
   gdouble view_height;
 
-  /* TODO allow center to differ from (0, 0) */
-  gdouble view_center_re;
-  gdouble view_center_im;
-
   /* c in: f(z) = z^2 + c */
   double cre;
   double cim;
+
+  gdouble center_re;
+  gdouble center_im;
 
   guint iterations;
 
@@ -122,8 +123,8 @@ static void blend_to_new_actor (JseWindow *win, gdouble old_zoom_level);
 static void
 jse_window_init (JseWindow *window)
 {
-  window->view_center_re = VIEW_CENTER_RE;
-  window->view_center_im = VIEW_CENTER_IM;
+  window->center_re = CENTER_RE;
+  window->center_im = CENTER_IM;
 
   window->view_width = VIEW_WIDTH;
   window->view_height = VIEW_HEIGHT;
@@ -240,6 +241,14 @@ jse_window_set_property (GObject *object,
       jse_window_set_cim (win, g_value_get_double (value));
       break;
 
+    case PROP_CENTER_RE:
+      jse_window_set_center_re (win, g_value_get_double (value));
+      break;
+
+    case PROP_CENTER_IM:
+      jse_window_set_center_im (win, g_value_get_double (value));
+      break;
+
     case PROP_ITERATIONS:
       jse_window_set_iterations (win, g_value_get_uint (value));
       break;
@@ -270,6 +279,14 @@ jse_window_get_property (GObject *object,
 
     case PROP_CIM:
       g_value_set_double (value, jse_window_get_cim (win));
+      break;
+
+    case PROP_CENTER_RE:
+      g_value_set_double (value, jse_window_get_center_re (win));
+      break;
+
+    case PROP_CENTER_IM:
+      g_value_set_double (value, jse_window_get_center_im (win));
       break;
 
     case PROP_ITERATIONS:
@@ -316,6 +333,16 @@ jse_window_class_init (JseWindowClass *class)
   props[PROP_CIM] =
     g_param_spec_double ("cim", "c_im", "im part of c",
                          -1.d, 1.d, 0.d,
+                         G_PARAM_READWRITE);
+
+  props[PROP_CENTER_RE] =
+    g_param_spec_double ("center_re", "center re", "Position of the view's center on the Real axis",
+                         -2.d, 2.d, 0.d,
+                         G_PARAM_READWRITE);
+
+  props[PROP_CENTER_IM] =
+    g_param_spec_double ("center_im", "center im", "Position of the view's center on the Im axis",
+                         -2.d, 2.d, 0.d,
                          G_PARAM_READWRITE);
 
   props[PROP_ITERATIONS] =
@@ -376,8 +403,8 @@ get_clutter_actor_for_zoom_level (JseWindow *win,
       /* create a new pixbuf for the new zoom value */
       jp = julia_pixbuf_new (win->pixbuf_width,
                              win->pixbuf_height);
-      JuliaView jv_tmp = {win->view_center_re,
-                          win->view_center_im,
+      JuliaView jv_tmp = {win->center_re,
+                          win->center_im,
                           win->view_width,
                           win->view_height,
                           zoom_level,
@@ -582,6 +609,46 @@ jse_window_get_cim (JseWindow *win)
   return win->cim;
 }
 
+gdouble
+jse_window_get_center_re (JseWindow *win)
+{
+  return win->center_re;
+}
+
+void
+jse_window_set_center_re (JseWindow *win, gdouble x)
+{
+  if (win->center_re == x)
+    return;
+
+  win->center_re = x;
+
+  g_hash_table_remove_all (win->hashtable);
+  blend_to_new_actor (win, win->zoom_level);
+
+  g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CENTER_RE]);
+}
+
+gdouble
+jse_window_get_center_im (JseWindow *win)
+{
+  return win->center_im;
+}
+
+void
+jse_window_set_center_im (JseWindow *win, gdouble y)
+{
+  if (win->center_im == y)
+    return;
+
+  win->center_im = y;
+
+  g_hash_table_remove_all (win->hashtable);
+  blend_to_new_actor (win, win->zoom_level);
+
+  g_object_notify_by_pspec (G_OBJECT (win), props[PROP_CENTER_IM]);
+}
+
 void
 jse_window_set_iterations (JseWindow *win,
                            guint iterations)
@@ -678,8 +745,8 @@ update_position_label (JseWindow *win,
   double width = win->view_width * pow(ZOOM_FACTOR, zoom_level);
   double height = win->view_height * pow(ZOOM_FACTOR, zoom_level);
 
-  double pos_re = win->view_center_re + width * (x / win->pixbuf_width - 0.5);
-  double pos_im = win->view_center_im + height * (0.5 - y / win->pixbuf_height);
+  double pos_re = win->center_re + width * (x / win->pixbuf_width - 0.5);
+  double pos_im = win->center_im + height * (0.5 - y / win->pixbuf_height);
 
   GString *text = g_string_new (NULL);
   if (win->pointer_in_stage)
