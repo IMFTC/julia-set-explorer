@@ -408,7 +408,7 @@ get_clutter_actor_for_zoom_level (JseWindow *win,
 
       g_hash_table_insert (hashtable,
                            GINT_TO_POINTER (zoom_level),
-                           g_object_ref (actor));
+                           actor);
     };
 
   /* (re)set defaults  */
