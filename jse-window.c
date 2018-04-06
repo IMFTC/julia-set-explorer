@@ -100,9 +100,6 @@ struct _JseWindow
 /* final types don't need private data */
 G_DEFINE_TYPE (JseWindow, jse_window, GTK_TYPE_APPLICATION_WINDOW);
 
-static void update_position_label (JseWindow *win,
-                                   gdouble x,
-                                   gdouble y);
 static gboolean stage_leave_notify_event_cb (ClutterActor *stage,
                                              ClutterEvent *event,
                                              JseWindow *win);
@@ -117,8 +114,17 @@ static gboolean stage_scroll_event_cb (ClutterActor *actor,
                                        ClutterScrollEvent *event,
                                        JseWindow *win);
 
+static gboolean stage_button_press_event_cb (ClutterActor *actor,
+                                             ClutterButtonEvent *event,
+                                             gpointer user_data);
+
+static void update_position_label (JseWindow *win,
+                                   gdouble x,
+                                   gdouble y);
 static void update_button_c_label (JseWindow *win);
-static void blend_to_new_actor (JseWindow *win, gdouble old_zoom_level);
+
+static void blend_to_new_actor (JseWindow *win,
+                                gdouble old_zoom_level);
 
 static void
 jse_window_init (JseWindow *window)
@@ -197,6 +203,8 @@ jse_window_init (JseWindow *window)
                     G_CALLBACK (stage_enter_notify_event_cb), window);
   g_signal_connect (window->stage,"motion-event",
                     G_CALLBACK (stage_motion_notify_event_cb), window);
+  g_signal_connect (window->stage,"button-press-event",
+                    G_CALLBACK (stage_button_press_event_cb), window);
 }
 
 static void jse_window_constructed (GObject *object)
@@ -789,6 +797,17 @@ stage_leave_notify_event_cb (ClutterActor *stage,
 {
   win->pointer_in_stage = FALSE;
   update_position_label (win, 0, 0);
+
+  return TRUE;
+}
+
+static gboolean stage_button_press_event_cb (ClutterActor *actor,
+                                             ClutterButtonEvent *event,
+                                             gpointer user_data)
+{
+  JseWindow *win = JSE_WINDOW (user_data);
+
+  g_debug ("ClutterButtonEvent at (%f, %f)", event->x, event->y);
 
   return TRUE;
 }
