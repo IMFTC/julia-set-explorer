@@ -743,18 +743,29 @@ update_button_c_label (JseWindow *win)
 }
 
 static void
-update_position_label (JseWindow *win,
-                       gdouble x,
-                       gdouble y)
+get_complex_number_at_pos (JseWindow *win,
+                           gdouble x, gdouble y,
+                           gdouble *complex_re, gdouble *complex_im)
 {
-  /* TODO: Reduce calculations by saving values somewhere */
   int zoom_level = win->zoom_level;
 
   double width = win->view_width * pow(ZOOM_FACTOR, zoom_level);
   double height = win->view_height * pow(ZOOM_FACTOR, zoom_level);
 
-  double pos_re = win->center_re + width * (x / win->pixbuf_width - 0.5);
-  double pos_im = win->center_im + height * (0.5 - y / win->pixbuf_height);
+  *complex_re = win->center_re + width * (x / win->pixbuf_width - 0.5);
+  *complex_im = win->center_im + height * (0.5 - y / win->pixbuf_height);
+}
+
+static void
+update_position_label (JseWindow *win,
+                       gdouble x,
+                       gdouble y)
+{
+  int zoom_level = win->zoom_level;
+
+  gdouble pos_re, pos_im;
+
+  get_complex_number_at_pos (win, x, y, &pos_re, &pos_im);
 
   GString *text = g_string_new (NULL);
   if (win->pointer_in_stage)
@@ -801,13 +812,17 @@ stage_leave_notify_event_cb (ClutterActor *stage,
   return TRUE;
 }
 
-static gboolean stage_button_press_event_cb (ClutterActor *actor,
+static
+gboolean stage_button_press_event_cb (ClutterActor *actor,
                                              ClutterButtonEvent *event,
                                              gpointer user_data)
 {
   JseWindow *win = JSE_WINDOW (user_data);
+  gdouble x, y;
 
-  g_debug ("ClutterButtonEvent at (%f, %f)", event->x, event->y);
+  get_complex_number_at_pos (win, event->x, event->y, &x, &y);
+
+  g_debug ("ClutterButtonEvent at (%f, %f), complex number: %f + %fi", event->x, event->y, x, y);
 
   return TRUE;
 }
