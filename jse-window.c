@@ -343,7 +343,9 @@ jse_window_new (GtkApplication *app)
 }
 
 ClutterActor *
-get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
+get_clutter_actor_for_zoom_level (JseWindow *win,
+                                  gint zoom_level,
+                                  gboolean *was_hashed)
 {
   GHashTable *hashtable = win->hashtable;
   ClutterContent *image;
@@ -358,6 +360,8 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
                                     &value))
     {
       /* hash table hit */
+      if (was_hashed != NULL)
+        *was_hashed = TRUE;
 
       actor = (ClutterActor *) value;
       g_debug ("Cache hit for zoom level %d", zoom_level);
@@ -365,6 +369,8 @@ get_clutter_actor_for_zoom_level (JseWindow *win, gint zoom_level)
   else
     {
       /* hash table miss */
+      if (was_hashed != NULL)
+        *was_hashed = FALSE;
 
       g_debug ("Cache miss for zoom level %d", zoom_level);
       /* create a new pixbuf for the new zoom value */
@@ -470,34 +476,41 @@ blend_to_new_actor (JseWindow *win, gdouble old_zoom_level)
       clutter_actor_restore_easing_state (old_actor);
     }
 
-  ClutterActor *new_actor = get_clutter_actor_for_zoom_level (win, win->zoom_level);
+  /* FIXME: get_clutter_actor_for_zoom_level blocks the main thread
+     here and can take a long time, make this async */
+  gboolean was_hashed;
+  ClutterActor *new_actor = get_clutter_actor_for_zoom_level (win, win->zoom_level, &was_hashed);
   clutter_actor_set_opacity (new_actor, 0);
   clutter_actor_add_child (win->stage, new_actor);
 
-  clutter_actor_save_easing_state (new_actor);
-
-  if (use_scaling)
-    /* wait for a possible scale transition to finish before fading in
-       the new actor */
-    clutter_actor_set_easing_delay (new_actor, scale_time);
-
-  if (zoom_level_delta == 1)
-    clutter_actor_set_easing_duration (new_actor, 0);
+  if (zoom_level_delta == 1 && was_hashed)
+    {
+      /* allow fast zooming with actors already in the hashtable */
+      clutter_actor_save_easing_state (new_actor);
+      clutter_actor_set_easing_duration (new_actor, 0);
+      clutter_actor_set_opacity (new_actor, 255);
+      clutter_actor_restore_easing_state (new_actor);
+      on_transition_stopped_cb (new_actor, "unused", TRUE, win);
+    }
   else
-    clutter_actor_set_easing_duration (new_actor, 100);
+    {
+      /* wait for scaling tween to finish */
+      clutter_actor_save_easing_state (new_actor);
+      if (use_scaling)
+        clutter_actor_set_easing_delay (new_actor, scale_time);
 
-  clutter_actor_set_opacity (new_actor, 255);
+      clutter_actor_set_easing_duration (new_actor, 100);
+      clutter_actor_set_opacity (new_actor, 255);
+      clutter_actor_restore_easing_state (new_actor);
 
-  clutter_actor_restore_easing_state (new_actor);
-
-  /* FIXME: This should not be necessary for the !old_actor case, why
-     isn't on_transition_stopped_cb called for the first actor that is
-     created? */
-  if (zoom_level_delta == 1 || !old_actor)
-    on_transition_stopped_cb (new_actor, "unused", TRUE, win);
-  else
-    g_signal_connect (new_actor, "transition-stopped::opacity",
-                      G_CALLBACK (on_transition_stopped_cb), win);
+      /* on_transition_stopped_cb sets win->current_actor to
+         new_actor */
+      if (old_actor)
+        g_signal_connect (new_actor, "transition-stopped::opacity",
+                          G_CALLBACK (on_transition_stopped_cb), win);
+      else
+        on_transition_stopped_cb (new_actor, "unused", TRUE, win);
+    }
 
   g_debug ("blend_to_new_actor: actors: %p -> %p", old_actor, new_actor);
 }
