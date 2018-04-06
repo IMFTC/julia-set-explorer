@@ -23,21 +23,21 @@
 
 ** Status
 
-   For now all code is based on the assumption that the point (0,0)
-   of the complex plane is always fixed at the center of the
-   view. The reason for this major simplification is that it allows
-   mirroring of half of the picture and efficient caching without
-   using multiple tiles or the like.
+   The current code is experimental and badly organized as I'm mostly
+   still playing around to learn all the basics and gather ideas on
+   how to achieve certain things. You will also encounter warnings
+   coming from programming mistakes that haven't been fixed yet ;)
 
-   Allowing to center the view at arbitrary positions will be the next
-   big step once the basics are working.
+   But the basics are already working, such as:
+   - setting the constant c, max. number of iterations, and center of view from the UI
+   - animated transitions for zooming
 
 ** Building
 
    Currently only the [[http://mesonbuild.com/][meson]] build system is supported. Compile and
    run the binary (jse) with:
    #+BEGIN_SRC shell
-   $ meson builddir
+   $ meson --buildtype=release builddir
    $ cd builddir
    $ ninja
    $ ./jse
