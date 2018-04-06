@@ -787,8 +787,6 @@ update_position_label (JseWindow *win,
                        gdouble x,
                        gdouble y)
 {
-  int zoom_level = win->zoom_level;
-
   gdouble pos_re, pos_im;
 
   get_complex_number_at_pos (win, x, y, &pos_re, &pos_im);
