@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <math.h>
 #include <pthread.h>
+
+#include <gmp.h>
+#include <math.h>
+
 
 #include "julia.h"
 
@@ -63,37 +65,73 @@ void *
 julia_pixbuf_update_partial (void *data)
 {
   JuliaThreadArgs *args = (JuliaThreadArgs *) data;
-  JuliaPixbuf *pixbuf = args->pixbuf;
-  JuliaView *view = args->view;
   int thread = args->thread;
   int n_threads = args->n_threads;
 
-  /* unpack settings */
-  unsigned char *pixel = pixbuf->pixbuf;
-  int pix_height = pixbuf->pix_height;
-  int pix_width = pixbuf->pix_width;
-  int pixbuf_size = pixbuf->size;
-
-  double centerx = view->centerx;
-  double centery = view->centery;
-  double cx = view->cx;
-  double cy = view->cy;
+  JuliaView *view = args->view;
   int zoom_level = view->zoom_level;
   int max_iterations = view->max_iterations;
 
+  JuliaPixbuf *pixbuf = args->pixbuf;
+  unsigned char *pixel = pixbuf->pixbuf;
+  unsigned int pix_height = pixbuf->pix_height;
+  unsigned int pix_width = pixbuf->pix_width;
+  int pixbuf_size = pixbuf->size;
+
+  /* TODO: view->centerx should itself be mpf_t and calculated using
+     gmp functions, otherwise at zoom levels near 400 the whole stage
+     returns the same (centerx, centery) values and navigation becomes
+     impossible. */
+  mpf_t _centerx;
+  mpf_t _centery;
+  mpf_init_set_d (_centerx, view->centerx);
+  mpf_init_set_d (_centery, view->centery);
+
+  mpf_t _cx;
+  mpf_t _cy;
+  mpf_init_set_d (_cx, view->cx);
+  mpf_init_set_d (_cy, view->cy);
+
+  mpf_t _default_width;
+  mpf_t _default_height;
+  mpf_init_set_d (_default_width, view->default_width);
+  mpf_init_set_d (_default_height, view->default_height);
   /* Dimensions of the rectangle in the complex plane after
    * applying the zoom factor. */
-  double width = view->default_width * pow(ZOOM_FACTOR, zoom_level);
-  double height = view->default_height * pow(ZOOM_FACTOR, zoom_level);
+  mpf_t _width;
+  mpf_t _height;
+  /* width = view->default_width * pow(ZOOM_FACTOR, zoom_level);   */
+  mpf_init_set_d (_width, ZOOM_FACTOR);
+  if (zoom_level < 0)
+    {
+    mpf_pow_ui (_width, _width, -zoom_level);
+    mpf_ui_div (_width, 1, _width);
+  }
+  else
+    mpf_pow_ui (_width, _width, zoom_level);
+  mpf_mul (_width, _default_width, _width);
+  /* height = view->default_height * pow(ZOOM_FACTOR, zoom_level); */
+  mpf_init_set_d (_height, ZOOM_FACTOR);
+  if (zoom_level < 0)
+    {
+    mpf_pow_ui (_height, _height, -zoom_level);
+    mpf_ui_div (_height, 1, _height);
+  }
+  else
+    mpf_pow_ui (_height, _height, zoom_level);
+  mpf_mul (_height, _default_height, _height);
+
+  // printf("_width : %f, height: %f\n", mpf_get_d (_width), mpf_get_d (_height));
 
   int iteration, position;
-  double zx_tmp, zx, zy, zx_2, zy_2;
+  /* double zx_tmp, zx, zy, zx_2, zy_2; */
   double color_scale = 255. / max_iterations;
   char max_iter_color[3] = {0};
   unsigned char *first_pixel, *last_pixel, *mirrored_pixel;
 
-  /* is mirroring at (0,0) is possible? */
-  int use_mirroring = (centerx == 0) && (centery == 0);
+  /* is mirroring at (0,0) possible? */
+
+  int use_mirroring = (!mpf_cmp_ui (_centerx, 0) && !mpf_cmp_ui (_centery, 0));
 
   // printf("thread number: %d\n", thread);
 
@@ -102,29 +140,66 @@ julia_pixbuf_update_partial (void *data)
   /* Address of first byte of last pixel (one pixel is 3 bytes). */
   last_pixel = first_pixel + pixbuf_size - 3;
 
-  /* Update every pixel taking advantage of the symmetry by filling
-   * the left and right half at once. */
+  mpf_set_default_prec(64);
+  mpf_t _zx, _zx_2, _zx_tmp, _zy, _zy_2, _tmp;
+  mpf_inits (_zx, _zx_2, _zx_tmp, _zy, _zy_2, _tmp, NULL);
+  mpf_t _0_5;
+  mpf_init_set_d (_0_5, 0.5);
+
+  // printf ("_centerx: %f, _centery: %f\n", mpf_get_d (_centerx), mpf_get_d (_centery));
+
   int x_max = use_mirroring ? pix_width / 2 : pix_width;
 
   for (int x = thread; x < x_max; x += n_threads) {
-    zx_tmp = centerx + width * ((double) x / (double) pix_width - 0.5);
+    /* zx_tmp = centerx + width * ((double) x / (double) pix_width - 0.5); */
+    mpf_set_ui (_zx_tmp, pix_width);
+    mpf_ui_div (_zx_tmp, x, _zx_tmp);
+    mpf_sub (_zx_tmp, _zx_tmp, _0_5);
+    mpf_mul (_zx_tmp, _width, _zx_tmp);
+    mpf_add (_zx_tmp, _centerx, _zx_tmp);
+
     for (int y = 0; y < pix_height; y++) {
+      // printf("x: %d, y: %d\n", x, y);
       /* Get the re and im parts for the complex number corresponding
        * to the current pixel. */
-      zx = zx_tmp;
-      zy = centery + height * (0.5 - (double) y / (double) pix_height);
+
+      /* zx = zx_tmp; */
+      mpf_set (_zx, _zx_tmp);
+
+      /* TODO: Save these to an array to avoid calculating _zy again
+         for each row. */
+
+      /* zy = centery + height * (0.5 - (double) y / (double) pix_height); */
+      mpf_set_ui (_zy, pix_height);
+      mpf_ui_div (_zy, y, _zy);
+      mpf_sub (_zy, _0_5, _zy);
+      mpf_mul (_zy, _height, _zy);
+      mpf_add (_zy, _centery, _zy);
+      /* printf ("zx: %f, zy: %f\n", mpf_get_d (_zx), mpf_get_d (_zy)); */
 
       iteration = 0;
       while (iteration < max_iterations) {
-        zx_2 = zx * zx;      /* Re(z)^2 */
-        zy_2 = zy * zy;      /* Im(z)^2 */
+        /* zx_2 = _zx * _zx;      /\* Re(z)^2 *\/ */
+        mpf_mul (_zx_2, _zx, _zx);
+        /* zy_2 = zy * zy;      /\* Im(z)^2 *\/ */
+        mpf_mul (_zy_2, _zy, _zy);
 
         /* Leave loop if |z_n| > 2 */
-        if (zx_2 + zy_2 > 4.)
+        /* if (zx_2 + zy_2 > 4.) */
+        mpf_add (_tmp, _zx_2, _zy_2);
+        if (mpf_cmp_ui (_tmp, 4) > 0)
           break;
 
-        zy = 2.0 * zx * zy + cy;
-        zx = zx_2 - zy_2 + cx;
+        /* zy = 2.0 * zx * zy + cy; */
+        /* Mind the order of operations here since we overwrite _zy
+           with intermediate values! */
+        mpf_mul (_zy, _zx, _zy);
+        mpf_mul_ui (_zy, _zy, 2);
+        mpf_add (_zy, _zy, _cy);
+
+        /* zx = zx_2 - zy_2 + cx; */
+        mpf_sub (_zx, _zx_2, _zy_2);
+        mpf_add (_zx, _zx, _cx);
 
         iteration++;
       }
@@ -133,7 +208,6 @@ julia_pixbuf_update_partial (void *data)
       pixel = first_pixel + position;
       mirrored_pixel = last_pixel - position;
 
-      /* TODO: Use a proper colormap */
       if (iteration == max_iterations) {
         memcpy(pixel, max_iter_color, 3);
         if (use_mirroring)
@@ -142,6 +216,8 @@ julia_pixbuf_update_partial (void *data)
         /* pixel[thread % 3] = 20; */
         /* mirrored_pixel[thread % 3] = 100; */
       } else {
+        /* TODO: Use a proper color struct and color map where we can
+           copy R, G and B in one go using memcpy */
         pixel[RED] = 255 - (color_scale * iteration);
         pixel[GREEN] = pixel[RED];
         pixel[BLUE] = pixel[RED];
@@ -153,6 +229,9 @@ julia_pixbuf_update_partial (void *data)
       }
     }
   }
+
+  mpf_clears (_centerx, _centery, _cx, _cy, _default_width, _default_height, _width, _height, NULL);
+  mpf_clears (_zx, _zx_2, _zx_tmp, _zy, _zy_2, _0_5, _tmp, NULL);
 
   return NULL;
 }

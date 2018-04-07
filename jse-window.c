@@ -11,12 +11,12 @@
 #define PIXBUF_HEIGHT 800
 #define PIXBUF_WIDTH  800
 
-#define MAX_ZOOM_LEVEL 200
+#define MAX_ZOOM_LEVEL 500
 #define MIN_ZOOM_LEVEL -10
 
 #define MAX_ITERATIONS 5000
-#define MIN_ITERATIONS 0
-#define ITERATIONS 500
+#define MIN_ITERATIONS 1
+#define ITERATIONS 200
 
 /* TODO: The user should be able to set these! */
 /* The view of the complex plane to be displayed by the window */
@@ -411,13 +411,10 @@ get_clutter_actor_for_zoom_level (JseWindow *win,
       /* create a new pixbuf for the new zoom value */
       jp = julia_pixbuf_new (win->pixbuf_width,
                              win->pixbuf_height);
-      JuliaView jv_tmp = {win->center_re,
-                          win->center_im,
-                          win->view_width,
-                          win->view_height,
+      JuliaView jv_tmp = {win->center_re, win->center_im,
+                          win->view_width, win->view_height,
                           zoom_level,
-                          win->cre,
-                          win->cim,
+                          win->cre, win->cim,
                           win->iterations};
       julia_pixbuf_update_mt (jp, &jv_tmp);
 
@@ -425,8 +422,7 @@ get_clutter_actor_for_zoom_level (JseWindow *win,
       clutter_image_set_data (CLUTTER_IMAGE (image),
                               jp->pixbuf,
                               COGL_PIXEL_FORMAT_RGB_888,
-                              jp->pix_width,
-                              jp->pix_height,
+                              jp->pix_width, jp->pix_height,
                               jp->pix_width * 3,
                               NULL);
       julia_pixbuf_destroy (jp);
